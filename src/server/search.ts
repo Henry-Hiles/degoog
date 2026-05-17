@@ -67,11 +67,10 @@ const _TRACKING_PARAMS = new Set([
   "wt_mc",
 ]);
 
-const _normalizeUrl = (url: string): string => {
+const _cleanUrl = (url: string): string => {
   try {
     const parsed = new URL(url);
     parsed.hash = "";
-    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
     parsed.pathname = parsed.pathname.replace(/\/{2,}/g, "/");
     const keys = Array.from(parsed.searchParams.keys());
     for (const k of keys) {
@@ -80,6 +79,17 @@ const _normalizeUrl = (url: string): string => {
         parsed.searchParams.delete(k);
       }
     }
+    return parsed.href.replace(/\/+$/, "");
+  } catch {
+    return url;
+  }
+};
+
+const _normalizeUrl = (url: string): string => {
+  try {
+    const cleaned = _cleanUrl(url);
+    const parsed = new URL(cleaned);
+    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
     return parsed.href.replace(/\/+$/, "");
   } catch {
     return url;
@@ -116,7 +126,7 @@ const _mergeIntoMap = (
         ...r,
         title: stripHtml(r.title),
         snippet: stripHtml(r.snippet),
-        url: normalized,
+        url: _cleanUrl(r.url),
         score: positionScore,
         sources: [r.source],
         insecure,
