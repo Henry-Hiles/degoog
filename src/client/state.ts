@@ -21,6 +21,7 @@ export const state: AppState = {
   displayEnginePerformance: true,
   displaySearchSuggestions: true,
   postMethodEnabled: false,
+  inlineGifPlayback: true,
   isInitialLoad: false,
   imageFilter: {},
 };

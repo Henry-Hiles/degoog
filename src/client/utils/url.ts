@@ -28,12 +28,6 @@ export const readImgFilter = (p: URLSearchParams): ImageFilter => {
   return f;
 };
 
-export const proxyImageUrl = (url: string): string => {
-  if (!url) return "";
-  if (url.includes("/api/proxy/")) return url;
-  return `${getBase()}/api/proxy/image?url=${encodeURIComponent(url)}`;
-};
-
 export const faviconHostname = (url: string): string => {
   try {
     return new URL(url).hostname;

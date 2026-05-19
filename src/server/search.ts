@@ -96,6 +96,9 @@ const _normalizeUrl = (url: string): string => {
   }
 };
 
+const _urlIsGif = (url?: string): boolean =>
+  !!url && url.split(/[?#]/, 1)[0].toLowerCase().endsWith(".gif");
+
 const _mergeIntoMap = (
   urlMap: Map<string, ScoredResult>,
   results: SearchResult[],
@@ -120,6 +123,10 @@ const _mergeIntoMap = (
       if (r.thumbnail && !existing.thumbnail) {
         existing.thumbnail = r.thumbnail;
       }
+      if (r.imageUrl && (!existing.imageUrl || (!existing.isGif && _urlIsGif(r.imageUrl)))) {
+        existing.imageUrl = r.imageUrl;
+        existing.isGif = _urlIsGif(r.imageUrl);
+      }
       if (insecure) existing.insecure = true;
     } else {
       urlMap.set(normalized, {
@@ -130,6 +137,7 @@ const _mergeIntoMap = (
         score: positionScore,
         sources: [r.source],
         insecure,
+        isGif: _urlIsGif(r.imageUrl),
       });
     }
   }

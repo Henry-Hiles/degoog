@@ -1,6 +1,5 @@
 import { state } from "../../state";
 import { escapeHtml, cleanHostname } from "../../utils/dom";
-import { proxyImageUrl } from "../../utils/url";
 import { openMediaPreview, registerAppendMediaCards } from "../media/media";
 import { setupRetryLinks } from "./render-sidebar";
 import { renderTemplate } from "../../utils/template";
@@ -54,10 +53,17 @@ function _handleResize(): void {
 
 let _resizeListenerAdded = false;
 
+const _imageCardUrl = (r: ScoredResult): string => {
+  const thumbnail = r.thumbnail || "";
+  if (!state.inlineGifPlayback || !r.isGif || !r.imageUrl) return thumbnail;
+  return r.imageUrl;
+};
+
 const _buildMediaContext = (r: ScoredResult): Record<string, unknown> => ({
   title: r.title,
   url: r.url,
-  thumbnail_url: proxyImageUrl(r.thumbnail || ""),
+  thumbnail_url: _imageCardUrl(r),
+  fallback_url: r.thumbnail || "",
   hostname: cleanHostname(r.url),
   duration: r.duration || "",
   sources: r.sources,
