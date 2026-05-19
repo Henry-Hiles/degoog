@@ -4,6 +4,7 @@ import type {
   SearchType,
   TimeFilter,
   RetryPostBody,
+  ScoredResult
 } from "../../types";
 import {
   _applyRateLimit,
@@ -11,8 +12,16 @@ import {
   parseEngineConfig,
 } from "../../utils/search";
 import { guardApiKey } from "../../utils/api-key-guard";
-import { parseEnginesFromBody, parsePage } from "./_parsers";
+import { parseEnginesFromBody, parseImageFilter, parsePage } from "./_parsers";
 import { handleRetry, handleSearch } from "./_search-handlers";
+
+/**
+ * @todo Remove this once openwebui merges my future pull request to add degoog specific search support.
+ */
+const openWebUIFix = <T extends { results: ScoredResult[] }>(r: T) => ({
+  ...r,
+  results: r.results.map((res) => ({ ...res, content: res.snippet })),
+});
 
 export function registerSearchRoutes(router: Hono): void {
   router.get("/api/search", async (c) => {
@@ -34,9 +43,16 @@ export function registerSearchRoutes(router: Hono): void {
       lang: c.req.query("lang") || "",
       dateFrom: c.req.query("dateFrom") || "",
       dateTo: c.req.query("dateTo") || "",
+      imageFilter: parseImageFilter(
+        c.req.query("imgColor"),
+        c.req.query("imgSize"),
+        c.req.query("imgType"),
+        c.req.query("imgLayout"),
+        c.req.query("imgNsfw"),
+      ),
     });
 
-    return c.json(result);
+    return c.json(openWebUIFix(result));
   });
 
   router.post("/api/search", async (c) => {
@@ -67,9 +83,16 @@ export function registerSearchRoutes(router: Hono): void {
         lang: (form.get("lang") as string | null) || "",
         dateFrom: (form.get("dateFrom") as string | null) || "",
         dateTo: (form.get("dateTo") as string | null) || "",
+        imageFilter: parseImageFilter(
+          form.get("imgColor") as string | null,
+          form.get("imgSize") as string | null,
+          form.get("imgType") as string | null,
+          form.get("imgLayout") as string | null,
+          form.get("imgNsfw") as string | null,
+        ),
       });
 
-      return c.json(result);
+      return c.json(openWebUIFix(result));
     }
 
     let body: SearchBody;
@@ -91,9 +114,10 @@ export function registerSearchRoutes(router: Hono): void {
       lang: body.lang || "",
       dateFrom: body.dateFrom || "",
       dateTo: body.dateTo || "",
+      imageFilter: parseImageFilter(body.imgColor, body.imgSize, body.imgType, body.imgLayout, body.imgNsfw),
     });
 
-    return c.json(result);
+    return c.json(openWebUIFix(result));
   });
 
   router.get("/api/search/retry", async (c) => {
@@ -117,9 +141,16 @@ export function registerSearchRoutes(router: Hono): void {
       lang: c.req.query("lang") || "",
       dateFrom: c.req.query("dateFrom") || "",
       dateTo: c.req.query("dateTo") || "",
+      imageFilter: parseImageFilter(
+        c.req.query("imgColor"),
+        c.req.query("imgSize"),
+        c.req.query("imgType"),
+        c.req.query("imgLayout"),
+        c.req.query("imgNsfw"),
+      ),
     });
 
-    return c.json(result);
+    return c.json(openWebUIFix(result));
   });
 
   router.post("/api/search/retry", async (c) => {
@@ -149,8 +180,9 @@ export function registerSearchRoutes(router: Hono): void {
       lang: body.lang || "",
       dateFrom: body.dateFrom || "",
       dateTo: body.dateTo || "",
+      imageFilter: parseImageFilter(body.imgColor, body.imgSize, body.imgType, body.imgLayout, body.imgNsfw),
     });
 
-    return c.json(result);
+    return c.json(openWebUIFix(result));
   });
 }

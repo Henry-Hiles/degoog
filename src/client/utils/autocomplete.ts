@@ -16,8 +16,14 @@ function _updateAcHighlight(items: NodeListOf<HTMLElement>): void {
   });
 }
 
+export const abortAcReq = (): void => {
+  if (acTimeout) { clearTimeout(acTimeout); acTimeout = null; }
+  if (acController) { acController.abort(); acController = null; }
+};
+
 export function hideAcDropdown(dropdown: HTMLElement | null): void {
   if (!dropdown) return;
+  dropdown.innerHTML = "";
   dropdown.style.display = "none";
   dropdown.parentElement?.classList.remove("ac-open");
   acSelectedIdx = -1;
@@ -35,18 +41,18 @@ async function _fetchSuggestions(
   try {
     const res = state.postMethodEnabled
       ? await fetch(`${getBase()}/api/suggest`, {
-          method: "POST",
-          body: JSON.stringify({ query }),
-          headers: {
-            "Content-Type": "application/json",
-            ...searchAuthHeaders(),
-          },
-          signal: acController.signal,
-        })
+        method: "POST",
+        body: JSON.stringify({ query }),
+        headers: {
+          "Content-Type": "application/json",
+          ...searchAuthHeaders(),
+        },
+        signal: acController.signal,
+      })
       : await fetch(`${getBase()}/api/suggest?q=${encodeURIComponent(query)}`, {
-          headers: searchAuthHeaders(),
-          signal: acController.signal,
-        });
+        headers: searchAuthHeaders(),
+        signal: acController.signal,
+      });
 
     const raw = (await res.json()) as {
       text: string;
@@ -95,7 +101,7 @@ async function _fetchSuggestions(
         performSearch(text);
       });
     });
-  } catch {}
+  } catch { }
 }
 
 export function initAutocomplete(

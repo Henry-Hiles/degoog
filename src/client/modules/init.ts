@@ -2,6 +2,7 @@ import { initLuckyAnimation } from "../animations/lucky-animation";
 import {
   DISPLAY_ENGINE_PERFORMANCE,
   DISPLAY_SEARCH_SUGGESTIONS,
+  INLINE_GIF_PLAYBACK,
   OPEN_IN_NEW_TAB_KEY,
   POST_METHOD_ENABLED,
 } from "../constants";
@@ -10,8 +11,10 @@ import { initAutocomplete } from "../utils/autocomplete";
 import { idbGet } from "../utils/db";
 import { recordSettingsReturn, showHome } from "../utils/navigation";
 import { performSearch } from "../utils/search-actions";
+import { applyUovaStorage } from "../utils/uovadipasqua";
 import { initTheme } from "../utils/theme";
 import { initOptionsDropdown } from "../utils/time-filter";
+import { initImgFilters } from "./filters/image-filters";
 import { initMediaPreview } from "./media/media-preview";
 import { performTabSearch } from "./tabs/tab-search";
 import { initTabs } from "./tabs/tabs";
@@ -23,16 +26,21 @@ import { initSearchBarActions } from "../utils/search-bar-actions";
 import { renderPageTemplates } from "./renderer/render-page";
 import { initResultActions } from "./result-actions";
 import { getBase } from "../utils/base-url";
+import { isSettingsPathname } from "../utils/settings-path";
+import type { ImageFilter } from "../types/search";
+import { readImgFilter } from "../utils/url";
 
 type DegoogHistoryState = {
   degoog: boolean;
   query: string;
   type: string;
   page: number;
+  imageFilter?: ImageFilter;
 };
 
 export function init(): void {
   renderPageTemplates();
+  void applyUovaStorage();
 
   document.body.addEventListener(
     "click",
@@ -49,7 +57,7 @@ export function init(): void {
         return;
       }
       if (url.origin !== location.origin) return;
-      if (!url.pathname.startsWith("/settings")) return;
+      if (!isSettingsPathname(url.pathname)) return;
       recordSettingsReturn();
     },
     true,
@@ -61,6 +69,16 @@ export function init(): void {
   const resultsInput = document.getElementById(
     "results-search-input",
   ) as HTMLInputElement | null;
+  const clearSearchButton = document.getElementById(
+    "results-search-clear-btn",
+  ) as HTMLButtonElement | null;
+
+  clearSearchButton?.addEventListener("click", () => {
+    if (resultsInput) {
+      resultsInput.value = "";
+      clearSearchButton?.setAttribute("style", "display:none");
+    }
+  });
 
   document
     .getElementById("search-form-home")
@@ -80,6 +98,14 @@ export function init(): void {
   resultsInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && resultsInput)
       void performSearch(resultsInput.value);
+  });
+
+  resultsInput?.addEventListener("input", () => {
+    if (resultsInput) {
+      if (resultsInput.value && resultsInput.value.length > 0)
+        clearSearchButton?.setAttribute("style", "");
+      else clearSearchButton?.setAttribute("style", "display:none");
+    }
   });
 
   document
@@ -122,6 +148,7 @@ export function init(): void {
   initMediaPreview();
   void initTheme();
   initOptionsDropdown();
+  initImgFilters((q, t) => void performSearch(q, t));
   initInstallPrompt();
   initResultActions();
 
@@ -136,6 +163,9 @@ export function init(): void {
   });
   void idbGet<boolean>(POST_METHOD_ENABLED).then((v) => {
     if (v !== null) state.postMethodEnabled = v;
+  });
+  void idbGet<boolean>(INLINE_GIF_PLAYBACK).then((v) => {
+    if (v !== null) state.inlineGifPlayback = v;
   });
 
   document.body.addEventListener("click", (e) => {
@@ -168,6 +198,9 @@ export function init(): void {
   const resolvedQ = q || postQuery;
   const type = params.get("type") || postType || "web";
   const page = parseInt(params.get("page") ?? postPage ?? "1", 10) || 1;
+
+  if (type === "images") state.imageFilter = readImgFilter(params);
+
   if (resolvedQ) {
     state.isInitialLoad = true;
     if (searchInput) searchInput.value = resolvedQ;
@@ -206,6 +239,8 @@ export function init(): void {
         resultsInput.value = restoredQ;
         resultsInput.defaultValue = restoredQ;
       }
+      if (resultsInput && resultsInput.value.length > 0)
+        clearSearchButton?.setAttribute("style", "");
       return;
     }
 
@@ -229,6 +264,7 @@ export function init(): void {
     const hs = e.state as DegoogHistoryState | null;
     if (hs?.degoog) {
       state.isInitialLoad = true;
+      state.imageFilter = hs.imageFilter ? { ...hs.imageFilter } : {};
       if (hs.type?.startsWith("tab:")) {
         void performTabSearch(hs.query, hs.type.slice(4), hs.page);
       } else {
@@ -241,6 +277,8 @@ export function init(): void {
     if (popQ) {
       const popType = popParams.get("type") || "web";
       const popPage = parseInt(popParams.get("page") ?? "1", 10) || 1;
+      if (popType === "images") state.imageFilter = readImgFilter(popParams);
+      else state.imageFilter = {};
       state.isInitialLoad = true;
       if (popType.startsWith("tab:")) {
         void performTabSearch(popQ, popType.slice(4), popPage);

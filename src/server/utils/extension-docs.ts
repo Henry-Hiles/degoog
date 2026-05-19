@@ -15,18 +15,25 @@ const _destDirFromId = (id: string): string | null => {
 
 const _SAFE_FOLDER = /^[A-Za-z0-9._-]+$/;
 
-export const getExtensionReadmePath = (id: string): string | null => {
+const _folderById = new Map<string, string>();
+
+export const registerExtensionFolder = (id: string, folder: string): void => {
+  _folderById.set(id, folder);
+};
+
+export const getExtensionReadmePath = (id: string, folder?: string): string | null => {
   const base = _destDirFromId(id);
   if (!base) return null;
-  const folder = id.replace(/^[a-z-]+-/, "");
-  if (!folder.trim() || !_SAFE_FOLDER.test(folder)) return null;
-  return join(base, folder, "README.md");
+  const resolved = folder ?? _folderById.get(id) ?? id.replace(/^[a-z]+-/, "");
+  if (!resolved.trim() || !_SAFE_FOLDER.test(resolved)) return null;
+  return join(base, resolved, "README.md");
 };
 
 export const extensionReadmeExists = async (
   id: string,
+  folder?: string,
 ): Promise<ExtensionDocsPath> => {
-  const readmePath = getExtensionReadmePath(id);
+  const readmePath = getExtensionReadmePath(id, folder);
   if (!readmePath) return { readmePath: "", exists: false };
   try {
     await access(readmePath);

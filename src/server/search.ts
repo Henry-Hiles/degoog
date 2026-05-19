@@ -10,6 +10,7 @@ import type {
   EngineConfig,
   EngineContext,
   EngineTiming,
+  ImageFilter,
   ScoredResult,
   SearchEngine,
   SearchResponse,
@@ -20,7 +21,7 @@ import type {
 import { extractImageUrl } from "./utils/extract-image";
 import { logger } from "./utils/logger";
 import { outgoingFetch, parseOutgoingTransport } from "./utils/outgoing";
-import { stripHtml } from "./utils/text";
+import { stripHtml, stripCssBlocks } from "./utils/text";
 import { asString, getSettings } from "./utils/plugin-settings";
 import { buildSignedProxyUrl } from "./utils/proxy-sign";
 
@@ -66,11 +67,10 @@ const _TRACKING_PARAMS = new Set([
   "wt_mc",
 ]);
 
-const _normalizeUrl = (url: string): string => {
+const _cleanUrl = (url: string): string => {
   try {
     const parsed = new URL(url);
     parsed.hash = "";
-    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
     parsed.pathname = parsed.pathname.replace(/\/{2,}/g, "/");
     const keys = Array.from(parsed.searchParams.keys());
     for (const k of keys) {
@@ -84,6 +84,20 @@ const _normalizeUrl = (url: string): string => {
     return url;
   }
 };
+
+const _normalizeUrl = (url: string): string => {
+  try {
+    const cleaned = _cleanUrl(url);
+    const parsed = new URL(cleaned);
+    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    return parsed.href.replace(/\/+$/, "");
+  } catch {
+    return url;
+  }
+};
+
+const _urlIsGif = (url?: string): boolean =>
+  !!url && url.split(/[?#]/, 1)[0].toLowerCase().endsWith(".gif");
 
 const _mergeIntoMap = (
   urlMap: Map<string, ScoredResult>,
@@ -102,23 +116,28 @@ const _mergeIntoMap = (
       if (!existing.sources.includes(r.source)) {
         existing.sources.push(r.source);
       }
-      const cleanSnippet = stripHtml(r.snippet);
+      const cleanSnippet = stripCssBlocks(stripHtml(r.snippet));
       if (cleanSnippet.length > existing.snippet.length) {
         existing.snippet = cleanSnippet;
       }
       if (r.thumbnail && !existing.thumbnail) {
         existing.thumbnail = r.thumbnail;
       }
+      if (r.imageUrl && (!existing.imageUrl || (!existing.isGif && _urlIsGif(r.imageUrl)))) {
+        existing.imageUrl = r.imageUrl;
+        existing.isGif = _urlIsGif(r.imageUrl);
+      }
       if (insecure) existing.insecure = true;
     } else {
       urlMap.set(normalized, {
         ...r,
         title: stripHtml(r.title),
-        snippet: stripHtml(r.snippet),
-        url: normalized,
+        snippet: stripCssBlocks(stripHtml(r.snippet)),
+        url: _cleanUrl(r.url),
         score: positionScore,
         sources: [r.source],
         insecure,
+        isGif: _urlIsGif(r.imageUrl),
       });
     }
   }
@@ -215,6 +234,7 @@ export const createSearchEngineContext = (
   lang?: string,
   dateFrom?: string,
   dateTo?: string,
+  imageFilter?: ImageFilter,
 ): EngineContext => {
   const resolvedLang =
     lang ||
@@ -260,6 +280,7 @@ export const createSearchEngineContext = (
     buildAcceptLanguage: () => _buildAcceptLanguage(resolvedLang),
     extractImageUrl: extractImageUrl as EngineContext["extractImageUrl"],
     signProxyUrl: buildSignedProxyUrl,
+    imageFilter,
   };
 };
 
@@ -271,6 +292,7 @@ export const searchSingleEngine = async (
   lang?: string,
   dateFrom?: string,
   dateTo?: string,
+  imageFilter?: ImageFilter,
 ): Promise<{ results: SearchResult[]; timing: EngineTiming }> => {
   const engine = resolveEngine(engineName);
   if (!engine) {
@@ -287,6 +309,7 @@ export const searchSingleEngine = async (
     lang,
     dateFrom,
     dateTo,
+    imageFilter,
   );
   try {
     const timeout = await _getEngineTimeout(engineSettingsId);
@@ -318,6 +341,7 @@ export const search = async (
   lang?: string,
   dateFrom?: string,
   dateTo?: string,
+  imageFilter?: ImageFilter,
 ): Promise<SearchResponse> => {
   const start = performance.now();
   const p = Math.max(1, Math.min(MAX_PAGE, Math.floor(page) || 1));
@@ -325,7 +349,7 @@ export const search = async (
   const rawActiveEngines =
     type === "web"
       ? await getActiveWebEngines(config)
-      : getEnginesForSearchType(type, config).map((e) => ({
+      : (await getEnginesForSearchType(type, config)).map((e) => ({
         id: e.id,
         instance: e.instance,
         score: 1,
@@ -345,7 +369,7 @@ export const search = async (
   const settled = await Promise.allSettled(
     rawActiveEngines.map(async ({ instance, id }) => {
       const t0 = performance.now();
-      const ctx = createSearchEngineContext(id, lang, dateFrom, dateTo);
+      const ctx = createSearchEngineContext(id, lang, dateFrom, dateTo, imageFilter);
       const timeout = await _getEngineTimeout(id);
       const results = await _withTimeout(
         instance.executeSearch(query, p, timeFilter, ctx),

@@ -1,6 +1,7 @@
 import { Transport, ExtensionMeta, ExtensionStoreType } from "../../types";
 import { FetchTransport } from "./builtins/fetch";
 import { CurlTransport } from "./builtins/curl";
+import { CurlImpersonateTransport } from "./builtins/curl-impersonate";
 import { AutoTransport } from "./builtins/auto";
 import {
   getSettings,
@@ -9,12 +10,13 @@ import {
 } from "../../utils/plugin-settings";
 import { transportsDir } from "../../utils/paths";
 import { createRegistry } from "../registry-factory";
-import { extensionReadmeExists } from "../../utils/extension-docs";
+import { extensionReadmeExists, registerExtensionFolder } from "../../utils/extension-docs";
 import { stupidSettingIDtoAvoidConflicts } from "../extension-id";
 
 const _builtins: Transport[] = [
   new FetchTransport(),
   new CurlTransport(),
+  new CurlImpersonateTransport(),
   new AutoTransport(),
 ];
 
@@ -51,6 +53,7 @@ const registry = createRegistry<Transport>({
     if (_builtins.some((t) => t.name === name)) return;
     instance.name = name;
     _legacyNameByCanonical.set(name, legacyName);
+    registerExtensionFolder(`transport-${name}`, folderName);
     if (instance.configure) {
       const { settingsId, fallbackSettingsIds } =
         stupidSettingIDtoAvoidConflicts({
@@ -80,6 +83,10 @@ export function getTransport(name: string): Transport | undefined {
 
 export function getTransportNames(): string[] {
   return _all().map((t) => t.name);
+}
+
+export function getTransportDisplayNames(): string[] {
+  return _all().map((t) => t.displayName ?? t.name);
 }
 
 export const getAvailableTransportNames = async (): Promise<string[]> => {

@@ -1,4 +1,4 @@
-import type { ScoredResult, SearchResponse } from "./search";
+import type { ImageFilter, ScoredResult, SearchResponse } from "./search";
 
 export type EngineRecord = Record<string, boolean>;
 
@@ -23,5 +23,7 @@ export interface AppState {
   displayEnginePerformance: boolean;
   displaySearchSuggestions: boolean;
   postMethodEnabled: boolean;
+  inlineGifPlayback: boolean;
   isInitialLoad: boolean;
+  imageFilter: ImageFilter;
 }

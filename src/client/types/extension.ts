@@ -17,6 +17,7 @@ export interface SettingField {
   description?: string;
   secret?: boolean;
   options?: string[];
+  optionLabels?: string[];
   default?: string;
   advanced?: boolean;
   visibleWhen?: { key: string; equals: string };
@@ -26,7 +27,9 @@ export interface ExtensionMeta {
   id: string;
   displayName: string;
   description: string;
+  searchType?: string;
   type: string;
+  trigger?: string;
   configurable: boolean;
   settingsSchema: SettingField[];
   settings: Record<string, string | string[]>;
@@ -34,6 +37,7 @@ export interface ExtensionMeta {
   extensionDocsAvailable?: boolean;
   defaultEnabled?: boolean;
   defaultFeedUrls?: string[];
+  isClientExposed?: boolean;
   requiresNewerVersion?: boolean;
 }
 

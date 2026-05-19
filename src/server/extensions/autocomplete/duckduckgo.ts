@@ -2,8 +2,9 @@ import type {
   AutocompleteProvider,
   AutocompleteContext,
   AutocompleteSuggestion,
-  RichSuggestion,
+  RichSuggestion
 } from "../../types";
+import { asBoolean, type SettingValue } from "../../utils/plugin-settings";
 
 export class DuckDuckGoAutocompleteProvider implements AutocompleteProvider {
   name = "DuckDuckGo";
@@ -22,8 +23,8 @@ export class DuckDuckGoAutocompleteProvider implements AutocompleteProvider {
 
   private richEnabled = false;
 
-  configure(settings: Record<string, string | string[]>): void {
-    this.richEnabled = settings.richSuggestions === "true";
+  configure(settings: Record<string, SettingValue>): void {
+    this.richEnabled = asBoolean(settings.richSuggestions);
   }
 
   async getSuggestions(
@@ -37,19 +38,19 @@ export class DuckDuckGoAutocompleteProvider implements AutocompleteProvider {
       doFetch(`https://duckduckgo.com/ac/?q=${encoded}&type=list`),
       this.richEnabled
         ? doFetch(
-            `https://api.duckduckgo.com/?q=${encoded}&format=json&no_redirect=1&no_html=1&skip_disambig=1`,
-          )
+          `https://api.duckduckgo.com/?q=${encoded}&format=json&no_redirect=1&no_html=1&skip_disambig=1`,
+        )
         : Promise.resolve(null),
     ]);
 
     const suggestions: string[] =
       suggestRes.status === "fulfilled"
         ? ((
-            (await suggestRes.value.json().catch(() => [null, []])) as [
-              unknown,
-              string[],
-            ]
-          )[1] ?? [])
+          (await suggestRes.value.json().catch(() => [null, []])) as [
+            unknown,
+            string[],
+          ]
+        )[1] ?? [])
         : [];
 
     let rich: (AutocompleteSuggestion & object) | null = null;

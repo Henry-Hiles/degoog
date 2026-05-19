@@ -3,11 +3,7 @@ import { getBase } from "../../utils/base-url";
 import type { ScoredResult } from "../../types";
 import { cleanHostname, escapeHtml } from "../../utils/dom";
 import { getEngines } from "../../utils/engines";
-import {
-  buildSearchBody,
-  buildSearchUrl,
-  proxyImageUrl,
-} from "../../utils/url";
+import { buildSearchBody, buildSearchUrl } from "../../utils/url";
 import { openLightbox } from "./lightbox";
 import { searchAuthHeaders, appendSearchAuthParams } from "../../utils/request";
 
@@ -76,7 +72,10 @@ export async function loadMoreMedia(type: string): Promise<void> {
   let res: Response;
   try {
     if (bangQuery) {
-      const params = new URLSearchParams({ q: bangQuery, page: String(nextPage) });
+      const params = new URLSearchParams({
+        q: bangQuery,
+        page: String(nextPage),
+      });
       res = await fetch(`${getBase()}/api/command?${params.toString()}`);
     } else {
       const engines = await getEngines();
@@ -86,12 +85,22 @@ export async function loadMoreMedia(type: string): Promise<void> {
             body: JSON.stringify(
               buildSearchBody(state.currentQuery, engines, type, nextPage),
             ),
-            headers: { "Content-Type": "application/json", ...searchAuthHeaders() },
+            headers: {
+              "Content-Type": "application/json",
+              ...searchAuthHeaders(),
+            },
           })
-        : await fetch(appendSearchAuthParams(buildSearchUrl(state.currentQuery, engines, type, nextPage)));
+        : await fetch(
+            appendSearchAuthParams(
+              buildSearchUrl(state.currentQuery, engines, type, nextPage),
+            ),
+          );
     }
 
-    const raw = (await res.json()) as { results?: ScoredResult[]; type?: string };
+    const raw = (await res.json()) as {
+      results?: ScoredResult[];
+      type?: string;
+    };
     const data = { results: raw.results ?? [] };
     if (data.results.length === 0) {
       if (type === "images") state.imageLastPage = page;
@@ -119,14 +128,6 @@ export async function loadMoreMedia(type: string): Promise<void> {
   }
 }
 
-const _getEmbedUrl = (url: string): string | null => {
-  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?/]+)/);
-  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
-  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
-  return null;
-};
-
 export function openMediaPreview(
   item: ScoredResult,
   idx: number,
@@ -149,34 +150,14 @@ export function openMediaPreview(
   );
   imgWrap?.querySelector(".media-preview-embed")?.remove();
 
-  const embedUrl = isVideo ? _getEmbedUrl(item.url) : null;
-
   if (img) {
-    if (embedUrl) {
-      img.style.display = "none";
-      img.src = "";
-      img.style.cursor = "";
-      img.onclick = null;
-      const iframe = document.createElement("iframe");
-      iframe.className="media-preview-embed";
-      iframe.src = embedUrl;
-      iframe.setAttribute("allowfullscreen", "");
-      iframe.setAttribute("allow", "encrypted-media");
-      img.insertAdjacentElement("afterend", iframe);
-    } else {
-      img.style.display = "";
-      img.src = proxyImageUrl(previewSrc) || "";
-      if (isVideo) {
-        img.style.cursor = "";
-        img.onclick = null;
-      } else {
-        img.style.cursor = "zoom-in";
-        img.onclick = () => {
-          const src = img.src;
-          if (src) openLightbox(src);
-        };
-      }
-    }
+    img.style.display = "";
+    img.src = previewSrc || "";
+    img.style.cursor = "zoom-in";
+    img.onclick = () => {
+      const src = img.src;
+      if (src) openLightbox(src);
+    };
   }
 
   if (info) {
@@ -189,7 +170,7 @@ export function openMediaPreview(
     if (isVideo) {
       actions = `<a class="btn btn--primary degoog-btn degoog-btn--primary media-preview-visit" href="${escapeHtml(item.url)}"${target}>Watch video</a>`;
     } else {
-      const downloadUrl = previewSrc ? proxyImageUrl(previewSrc) : "";
+      const downloadUrl = previewSrc || "";
       const downloadFilename = (() => {
         try {
           const p = new URL(previewSrc).pathname;

@@ -17,7 +17,7 @@ import {
   maskSecrets,
 } from "../../utils/plugin-settings";
 import { createTranslatorFromPath } from "../../utils/translation";
-import { getEngineMap as getSearchEngineMap } from "../engines/registry";
+import { getDefaultEngineConfig, getEngineMap as getSearchEngineMap } from "../engines/registry";
 import { pluginsDir } from "../../utils/paths";
 import { createRegistry } from "../registry-factory";
 import { extensionReadmeExists } from "../../utils/extension-docs";
@@ -102,7 +102,7 @@ const registry = createRegistry<CommandEntry>({
   debugTag: "commands",
 });
 
-export async function initPlugins(): Promise<void> {
+async function loadAliases(): Promise<void> {
   const { readFile } = await import("fs/promises");
   const { aliasesFile } = await import("../../utils/paths");
 
@@ -119,13 +119,18 @@ export async function initPlugins(): Promise<void> {
   } catch {
     userAliases = {};
   }
+}
 
+export async function initPlugins(): Promise<void> {
+  await loadAliases();
   commandSourceMap.clear();
   await registry.init();
 }
 
-export async function reloadCommands(): Promise<void> {
-  await initPlugins();
+export async function reloadCommands(bust = false): Promise<void> {
+  await loadAliases();
+  commandSourceMap.clear();
+  await (bust ? registry.reload() : registry.refresh());
 }
 
 export function getCommandSource(id: string): "builtin" | "plugin" {
@@ -235,7 +240,9 @@ export async function getFilteredCommandRegistry(): Promise<
     }),
   );
 
-  for (const [shortcut] of getEngineShortcuts()) {
+  const engineConfig = getDefaultEngineConfig();
+  for (const [shortcut, engineId] of getEngineShortcuts()) {
+    if (engineConfig[engineId] === false) continue;
     configuredTriggers.add(shortcut);
   }
 
@@ -360,10 +367,12 @@ export async function getPluginExtensionMeta(
           ? translatedDesc
           : entry.instance.description,
       type: "command",
+      trigger: entry.trigger,
       configurable: schema.length > 0,
       settingsSchema: translatedSchema,
       settings: maskedSettings,
       source: commandSourceMap.get(entry.id) ?? "plugin",
+      isClientExposed: entry.instance.isClientExposed,
     };
     const { exists } = await extensionReadmeExists(entry.id);
     meta.extensionDocsAvailable = exists;

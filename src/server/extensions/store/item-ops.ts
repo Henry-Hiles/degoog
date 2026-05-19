@@ -91,6 +91,7 @@ async function inferEngineTypeFromFolder(dir: string): Promise<string | null> {
   return null;
 }
 
+
 async function copyItemDir(
   srcDir: string,
   destDir: string,
@@ -141,15 +142,18 @@ function getEntriesForType(
   return pkg.engines;
 }
 
-async function reloadAfterAction(type: ExtensionStoreType): Promise<void> {
+export async function reloadAfterAction(
+  type: ExtensionStoreType,
+  bust = true,
+): Promise<void> {
   if (type === ExtensionStoreType.Plugin) {
-    await reloadSlotPlugins();
-    await reloadInterceptors();
-    await reloadSearchResultTabs();
-    await reloadCommands();
-    await reloadSearchBarActions();
-    await reloadPluginRoutes();
-    await reloadMiddlewareRegistry();
+    await reloadSlotPlugins(bust);
+    await reloadInterceptors(bust);
+    await reloadSearchResultTabs(bust);
+    await reloadCommands(bust);
+    await reloadSearchBarActions(bust);
+    await reloadPluginRoutes(bust);
+    await reloadMiddlewareRegistry(bust);
   } else if (type === ExtensionStoreType.Theme) {
     await reloadThemes();
   } else if (type === ExtensionStoreType.Transport) {
@@ -352,56 +356,59 @@ export async function installItem(
   )
     return;
   _installingSet.add(key);
-  const storeDir = getStoreDir();
-  const srcDir = join(storeDir, repo.localPath, normalizedPath);
-  const repoBase = resolve(join(storeDir, repo.localPath));
-  if (!resolve(srcDir).startsWith(repoBase + "/"))
-    throw new Error("Invalid item path.");
   try {
-    await stat(srcDir);
-  } catch {
-    throw new Error("Item path not found in repository.");
-  }
-  const pkg = JSON.parse(
-    await readFile(join(storeDir, repo.localPath, "package.json"), "utf-8"),
-  ) as RepoPackageJson;
-  const entries = getEntriesForType(pkg, type);
-  const manifest = entries?.find(
-    (e) => e.path.replace(/\/$/, "") === normalizedPath,
-  );
-  if (!manifest) throw new Error("Item not listed in package.json.");
-  if (manifest.dependencies?.length)
-    await installDependencies(manifest.dependencies);
-  const freshData = await readReposData();
-  const itemFolder = normalizedPath.split("/").pop() ?? normalizedPath;
-  const { author, name } = repoAuthorAndName(repo.url);
-  const folderName = `${author}-${name}-${slugifyIdPart(itemFolder)}`;
-  const destBase = getDestDir(type);
-  await mkdir(destBase, { recursive: true });
-  const destDir = join(destBase, folderName);
-  try {
-    await stat(destDir);
-    throw new Error(
-      `A ${type} named "${folderName}" already exists. Remove it first.`,
+    const storeDir = getStoreDir();
+    const srcDir = join(storeDir, repo.localPath, normalizedPath);
+    const repoBase = resolve(join(storeDir, repo.localPath));
+    if (!resolve(srcDir).startsWith(repoBase + "/"))
+      throw new Error("Invalid item path.");
+    try {
+      await stat(srcDir);
+    } catch {
+      throw new Error("Item path not found in repository.");
+    }
+    const pkg = JSON.parse(
+      await readFile(join(storeDir, repo.localPath, "package.json"), "utf-8"),
+    ) as RepoPackageJson;
+    const entries = getEntriesForType(pkg, type);
+    const manifest = entries?.find(
+      (e) => e.path.replace(/\/$/, "") === normalizedPath,
     );
-  } catch (e) {
-    if (e instanceof Error && e.message.includes("already exists")) throw e;
+    if (!manifest) throw new Error("Item not listed in package.json.");
+    if (manifest.dependencies?.length)
+      await installDependencies(manifest.dependencies);
+    const freshData = await readReposData();
+    const itemFolder = normalizedPath.split("/").pop() ?? normalizedPath;
+    const { author, name } = repoAuthorAndName(repo.url);
+    const folderName = `${author}-${name}-${slugifyIdPart(itemFolder)}`;
+    const destBase = getDestDir(type);
+    await mkdir(destBase, { recursive: true });
+    const destDir = join(destBase, folderName);
+    try {
+      await stat(destDir);
+      throw new Error(
+        `A ${type} named "${folderName}" already exists. Remove it first.`,
+      );
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("already exists")) throw e;
+    }
+    await copyItemDir(srcDir, destDir, STORE_METADATA);
+    freshData.installed.push({
+      repoUrl: repo.url,
+      type,
+      itemPath: normalizedPath,
+      installedAs: folderName,
+      installedAt: new Date().toISOString(),
+      version: manifest.version ?? "0.0.0",
+      ...(manifest.minDegoogVersion
+        ? { minDegoogVersion: manifest.minDegoogVersion }
+        : {}),
+    });
+    await writeReposData(freshData);
+    await reloadAfterAction(type);
+  } finally {
+    _installingSet.delete(key);
   }
-  await copyItemDir(srcDir, destDir, STORE_METADATA);
-  freshData.installed.push({
-    repoUrl: repo.url,
-    type,
-    itemPath: normalizedPath,
-    installedAs: folderName,
-    installedAt: new Date().toISOString(),
-    version: manifest.version ?? "0.0.0",
-    ...(manifest.minDegoogVersion
-      ? { minDegoogVersion: manifest.minDegoogVersion }
-      : {}),
-  });
-  await writeReposData(freshData);
-  _installingSet.delete(key);
-  await reloadAfterAction(type);
 }
 
 export async function uninstallItem(

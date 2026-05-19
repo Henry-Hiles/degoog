@@ -17,8 +17,10 @@ import {
   getSlotPluginById,
   getSlotSource,
 } from "../extensions/slots/registry";
-import { getInterceptorBySettingsId } from "../extensions/interceptors/registry";
-import { getInterceptorMeta } from "../extensions/interceptors/registry";
+import {
+  getInterceptorMeta,
+  getInterceptorBySettingsId,
+} from "../extensions/interceptors/registry";
 import { getSearchBarActionExtensionMeta } from "../extensions/search-bar/registry";
 import { getThemeExtensionMeta } from "../extensions/themes/registry";
 import {
@@ -49,7 +51,7 @@ import {
 import { outgoingFetch } from "../utils/outgoing";
 import { readFile } from "fs/promises";
 import { extensionReadmeExists } from "../utils/extension-docs";
-import { getInstalledItems } from "../extensions/store/item-ops";
+import { getInstalledItems, reloadAfterAction } from "../extensions/store/item-ops";
 import { isVersionAtLeast, getAppVersion } from "../utils/version";
 import { logger } from "../utils/logger";
 
@@ -110,6 +112,7 @@ async function getSlotExtensionMeta(
       settingsSchema: fullSchema,
       settings,
       source: getSlotSource(slot.id),
+      isClientExposed: slot.isClientExposed,
     });
   }
   return out;
@@ -177,12 +180,16 @@ router.get("/api/extensions", async (c) => {
     }
   }
 
+  const authenticated = await gandalf(canBalrogPass(c));
+  const redact = (items: ExtensionMeta[]): ExtensionMeta[] =>
+    authenticated ? items : items.map((m) => ({ ...m, settings: {} }));
+
   return c.json({
-    engines,
-    plugins: [...plugins, ...slotMeta, ...interceptorMeta, ...searchBarMeta],
-    themes,
-    transports,
-    autocomplete,
+    engines: redact(engines),
+    plugins: redact([...plugins, ...slotMeta, ...interceptorMeta, ...searchBarMeta]),
+    themes: redact(themes),
+    transports: redact(transports),
+    autocomplete: redact(autocomplete),
   });
 });
 
@@ -261,7 +268,22 @@ router.post("/api/extensions/:id/settings", async (c) => {
 
   const existing = await getSettings(id);
   const merged = mergeSecrets(filtered, existing, ext.settingsSchema);
+  const wasDisabled = existing.disabled === "true";
+  const nowDisabled = merged.disabled === "true";
   await setSettings(id, merged);
+
+  if (wasDisabled !== nowDisabled) {
+    const storeType = Object.values(ExtensionStoreType).includes(
+      ext.type as ExtensionStoreType,
+    )
+      ? (ext.type as ExtensionStoreType)
+      : ExtensionStoreType.Plugin;
+    try {
+      await reloadAfterAction(storeType, false);
+    } catch (err) {
+      logger.warn("extensions", `Failed to reload after toggle of ${id}`, err);
+    }
+  }
 
   if (
     id.startsWith("plugin-") &&

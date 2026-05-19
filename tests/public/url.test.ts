@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll } from "bun:test";
-import { buildSearchUrl, proxyImageUrl, faviconUrl } from "../../src/client/utils/url";
+import { buildSearchUrl, faviconUrl } from "../../src/client/utils/url";
 import { state } from "../../src/client/state";
 
 describe("public/url", () => {
@@ -7,16 +7,6 @@ describe("public/url", () => {
     const g = globalThis as unknown as { window?: { __DEGOOG_BASE_URL__?: string } };
     if (!g.window) g.window = {};
     g.window.__DEGOOG_BASE_URL__ = "";
-  });
-
-  test("proxyImageUrl returns empty for empty url", () => {
-    expect(proxyImageUrl("")).toBe("");
-  });
-
-  test("proxyImageUrl returns path with encoded url", () => {
-    const out = proxyImageUrl("https://example.com/img.png");
-    expect(out).toContain("/api/proxy/image");
-    expect(out).toContain("url=");
   });
 
   test("faviconUrl returns empty for invalid url", () => {

@@ -3,7 +3,6 @@ import {
   skeletonImageGrid,
   skeletonResults,
   skeletonSidebar,
-  skeletonVideoGrid,
 } from "../../animations/skeleton";
 import { BUILTIN_SEARCH_TYPES, MAX_PAGE } from "../../constants";
 import {
@@ -23,8 +22,8 @@ import {
   type ScoredResult,
   type SearchResponse,
 } from "../../types";
-import { hideAcDropdown } from "../autocomplete";
-import { triggerSearchQueryEggs } from "../uovadipasqua";
+import { abortAcReq, hideAcDropdown } from "../autocomplete";
+import { triggerUovadipasqua } from "../uovadipasqua";
 import { getEngines } from "../engines";
 import { setActiveTab, setTabsForBang, showAllTabs } from "../navigation";
 import { buildPaginationHtml } from "../pagination";
@@ -44,30 +43,12 @@ import {
   abortStreamingSearch,
   performStreamingSearch,
 } from "../streaming-search";
-import { buildSearchBody, buildSearchUrl } from "../url";
+import { buildSearchBody, buildSearchUrl, imgFilterRecord } from "../url";
 import { searchAuthHeaders, appendSearchAuthParams } from "../request";
 import { getBase } from "../base-url";
+import { fetchStreamingConfig } from "../streaming-config";
 
 let commandsCache: Command[] | null = null;
-let _streamingConfig: { enabled: boolean } | null = null;
-
-const _fetchStreamingConfig = async (): Promise<boolean> => {
-  if (_streamingConfig) return _streamingConfig.enabled;
-  try {
-    const res = await fetch(`${getBase()}/api/settings/streaming`);
-    if (res.ok) {
-      _streamingConfig = (await res.json()) as { enabled: boolean };
-      return _streamingConfig.enabled;
-    }
-  } catch {}
-  return false;
-};
-
-if (typeof window !== "undefined") {
-  window.addEventListener("extensions-saved", () => {
-    _streamingConfig = null;
-  });
-}
 
 if (typeof window !== "undefined") {
   window.addEventListener("extensions-saved", () => {
@@ -96,7 +77,10 @@ export async function performSearch(
   const resolvedType = type || state.currentType || "web";
   if (!query.trim()) return;
 
-  void triggerSearchQueryEggs(query);
+  void import("../../modules/filters/image-filters").then(
+    ({ syncImgFilters }) => syncImgFilters(resolvedType),
+  );
+  void triggerUovadipasqua(query);
 
   const isInit = state.isInitialLoad;
   state.isInitialLoad = false;
@@ -138,7 +122,7 @@ export async function performSearch(
     !naturalBangQuery &&
     !state.postMethodEnabled &&
     (!page || page === 1) &&
-    (await _fetchStreamingConfig())
+    (await fetchStreamingConfig())
   ) {
     abortStreamingSearch();
     return performStreamingSearch(
@@ -167,8 +151,10 @@ export async function performSearch(
   showAllTabs();
   setActiveTab(resolvedType);
   closeMediaPreview();
+  abortAcReq();
   hideAcDropdown(document.getElementById("ac-dropdown-home"));
   hideAcDropdown(document.getElementById("ac-dropdown-results"));
+  (document.activeElement as HTMLElement | null)?.blur();
 
   const resultsInput = document.getElementById(
     "results-search-input",
@@ -178,7 +164,7 @@ export async function performSearch(
     resultsInput.defaultValue = query;
   }
   const layout = document.getElementById("results-layout");
-  if (resolvedType === "images" || resolvedType === "videos") {
+  if (resolvedType === "images") {
     layout?.classList.add("media-mode");
   } else {
     layout?.classList.remove("media-mode");
@@ -186,7 +172,7 @@ export async function performSearch(
   const resultsMeta = document.getElementById("results-meta");
   if (resultsMeta) resultsMeta.textContent = "Searching...";
   clearSlotPanels();
-  if (resolvedType === "images" || resolvedType === "videos") {
+  if (resolvedType === "images") {
     abortGlancePanels();
     abortSlotPanels();
   }
@@ -195,12 +181,8 @@ export async function performSearch(
     glanceEl.innerHTML = resolvedType === "web" ? skeletonGlance() : "";
   const resultsList = document.getElementById("results-list");
   if (resultsList) {
-    if (resolvedType === "web" || resolvedType === "news") {
-      resultsList.innerHTML = skeletonResults();
-    } else if (resolvedType === "images") {
+    if (resolvedType === "images") {
       resultsList.innerHTML = skeletonImageGrid();
-    } else if (resolvedType === "videos") {
-      resultsList.innerHTML = skeletonVideoGrid();
     } else {
       resultsList.innerHTML = skeletonResults();
     }
@@ -208,7 +190,7 @@ export async function performSearch(
   const pagination = document.getElementById("pagination");
   if (pagination) pagination.innerHTML = "";
   const sidebar = document.getElementById("results-sidebar");
-  const isMediaType = resolvedType === "images" || resolvedType === "videos";
+  const isMediaType = resolvedType === "images";
   if (sidebar) sidebar.innerHTML = isMediaType ? "" : skeletonSidebar();
   document.title = `${query} - degoog`;
 
@@ -217,6 +199,8 @@ export async function performSearch(
     query,
     type: resolvedType,
     page: resolvedPage,
+    imageFilter:
+      resolvedType === "images" ? { ...state.imageFilter } : undefined,
   };
   if (state.postMethodEnabled) {
     if (isInit) {
@@ -228,6 +212,11 @@ export async function performSearch(
     const urlParams = new URLSearchParams({ q: query });
     if (resolvedType !== "web") urlParams.set("type", resolvedType);
     if (resolvedPage > 1) urlParams.set("page", String(resolvedPage));
+    if (resolvedType === "images") {
+      for (const [k, v] of Object.entries(imgFilterRecord(state.imageFilter))) {
+        urlParams.set(k, v);
+      }
+    }
     const getUrl = `${getBase()}/search?${urlParams.toString()}`;
     if (isInit) {
       history.replaceState(historyState, "", getUrl);
@@ -247,7 +236,10 @@ export async function performSearch(
           body: JSON.stringify(
             buildSearchBody(query, engines, resolvedType, resolvedPage),
           ),
-          headers: { "Content-Type": "application/json", ...searchAuthHeaders() },
+          headers: {
+            "Content-Type": "application/json",
+            ...searchAuthHeaders(),
+          },
         })
       : await fetch(appendSearchAuthParams(url));
 
@@ -320,7 +312,7 @@ async function _performSearchWithBang(
     state.currentData = searchData;
     const metaText = `About ${searchData.results.length} results (${(searchData.totalTime / 1000).toFixed(2)} seconds)`;
     setResultsMeta(metaText);
-    const isMediaType = type === "images" || type === "videos";
+    const isMediaType = type === "images";
     if (isMediaType) {
       if (glanceEl) glanceEl.innerHTML = "";
       renderMediaEngineBar(searchData.engineTimings ?? []);
@@ -373,8 +365,10 @@ async function _performBangCommand(
   isInit = false,
 ): Promise<void> {
   closeMediaPreview();
+  abortAcReq();
   hideAcDropdown(document.getElementById("ac-dropdown-home"));
   hideAcDropdown(document.getElementById("ac-dropdown-results"));
+  (document.activeElement as HTMLElement | null)?.blur();
   const resultsInput = document.getElementById(
     "results-search-input",
   ) as HTMLInputElement | null;
@@ -396,6 +390,7 @@ async function _performBangCommand(
   if (sidebar) sidebar.innerHTML = "";
   clearSlotPanels();
   document.title = `${query} - degoog`;
+  setTabsForBang(null);
 
   state.currentBangQuery = query;
 
@@ -410,9 +405,17 @@ async function _performBangCommand(
     }
   } else {
     if (isInit) {
-      history.replaceState(historyState, "", `${getBase()}/search?${urlParams.toString()}`);
+      history.replaceState(
+        historyState,
+        "",
+        `${getBase()}/search?${urlParams.toString()}`,
+      );
     } else {
-      history.pushState(historyState, "", `${getBase()}/search?${urlParams.toString()}`);
+      history.pushState(
+        historyState,
+        "",
+        `${getBase()}/search?${urlParams.toString()}`,
+      );
     }
   }
 
@@ -437,7 +440,7 @@ async function _performBangCommand(
     };
     if (data.type === "engine") {
       const engineType = data.searchType ?? "web";
-      const isMedia = engineType === "images" || engineType === "videos";
+      const isMedia = engineType === "images";
       state.currentResults = data.results ?? [];
       state.currentData = data as unknown as SearchResponse;
       state.currentType = engineType;
@@ -449,10 +452,10 @@ async function _performBangCommand(
       setActiveTab(engineType);
       setTabsForBang(engineType);
       if (isMedia) {
-        const glanceEl = document.getElementById("at-a-glance");
-        if (glanceEl) glanceEl.innerHTML = "";
-        const sidebar = document.getElementById("results-sidebar");
-        if (sidebar) sidebar.innerHTML = "";
+        const glanceElMedia = document.getElementById("at-a-glance");
+        if (glanceElMedia) glanceElMedia.innerHTML = "";
+        const sidebarMedia = document.getElementById("results-sidebar");
+        if (sidebarMedia) sidebarMedia.innerHTML = "";
         renderMediaEngineBar(data.engineTimings ?? []);
       }
       if (resultsMeta)

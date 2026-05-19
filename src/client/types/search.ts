@@ -1,3 +1,11 @@
+export interface ImageFilter {
+  color?: string;
+  size?: string;
+  type?: string;
+  layout?: string;
+  nsfw?: string;
+}
+
 export interface SearchResult {
   title: string;
   url: string;
@@ -5,6 +13,7 @@ export interface SearchResult {
   source: string;
   thumbnail?: string;
   imageUrl?: string;
+  isGif?: boolean;
   duration?: string;
 }
 

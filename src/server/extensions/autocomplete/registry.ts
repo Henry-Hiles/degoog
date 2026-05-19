@@ -6,17 +6,20 @@ import {
   type SettingField,
 } from "../../types";
 import {
+  asBoolean,
   asString,
   getSettings,
   maskSecrets,
   mergeDefaults,
 } from "../../utils/plugin-settings";
 import { autocompleteDir } from "../../utils/paths";
+import { DEGOOG_SETTINGS_ID } from "../../utils/search";
 import { outgoingFetch, parseOutgoingTransport } from "../../utils/outgoing";
 import { autocompleteCache, createCache } from "../../utils/cache";
-import { getTransportNames } from "../transports/registry";
+import { getTransportNames, getTransportDisplayNames } from "../transports/registry";
 import { createRegistry } from "../registry-factory";
 import { logger } from "../../utils/logger";
+import { buildSignedProxyUrl } from "../../utils/proxy-sign";
 import { GoogleAutocompleteProvider } from "./google";
 import { DuckDuckGoAutocompleteProvider } from "./duckduckgo";
 
@@ -125,8 +128,22 @@ async function _buildContext(providerId: string): Promise<AutocompleteContext> {
   const stored = await getSettings(providerId);
   const raw = asString(stored.outgoingTransport) || undefined;
   const transportName = parseOutgoingTransport(raw);
-  const rawLocale = (process.env.DEGOOG_DEFAULT_SEARCH_LANGUAGE || "").trim();
-  const lang = rawLocale.split(/[-_]/)[0].toLowerCase() || "en";
+  const globalSettings = await getSettings(DEGOOG_SETTINGS_ID);
+  const lang = (() => {
+    if (asBoolean(globalSettings.languagesEnabled)) {
+      const first = asString(globalSettings.languages ?? "")
+        .split(/[\n,]/)
+        .map((s) => s.trim().toLowerCase())
+        .find((s) => /^[a-z]{2,3}$/.test(s));
+      if (first) return first;
+    }
+    return (
+      (process.env.DEGOOG_DEFAULT_SEARCH_LANGUAGE || "")
+        .trim()
+        .split(/[-_]/)[0]
+        .toLowerCase() || "en"
+    );
+  })();
   return {
     fetch: (url, init) =>
       outgoingFetch(
@@ -145,7 +162,7 @@ export async function getEnabledAutocompleteProviders(): Promise<
   const providers: AutocompleteProvider[] = [];
   for (const p of _all()) {
     const stored = await getSettings(p.id);
-    if (asString(stored.disabled) !== "true") providers.push(p.instance);
+    if (!asBoolean(stored.disabled)) providers.push(p.instance);
   }
   return providers;
 }
@@ -178,7 +195,7 @@ export async function getSuggestionsFromProviders(query: string): Promise<
   const tasks = await Promise.all(
     all.map(async (p) => {
       const stored = await getSettings(p.id);
-      if (asString(stored.disabled) === "true") return null;
+      if (asBoolean(stored.disabled)) return null;
       const score = Math.max(parseFloat(asString(stored.score)) || 1, 0.1);
       return {
         provider: p.instance,
@@ -290,11 +307,19 @@ export async function getSuggestionsFromProviders(query: string): Promise<
   }
 
   const richMerged: NormItem[] = Array.from(richItems.values()).map(
-    (entry) => ({
-      text: entry.text,
-      source: entry.sources.join(", "),
-      rich: entry.rich,
-    }),
+    (entry) => {
+      const thumb = entry.rich.thumbnail;
+      return {
+        text: entry.text,
+        source: entry.sources.join(", "),
+        rich: {
+          ...entry.rich,
+          ...(thumb && !thumb.includes("/api/proxy/")
+            ? { thumbnail: buildSignedProxyUrl(thumb) }
+            : {}),
+        },
+      };
+    },
   );
 
   const plainMerged: NormItem[] = Array.from(seen.values()).map((entry) => ({
@@ -315,6 +340,7 @@ export async function getSuggestionsFromProviders(query: string): Promise<
 
 export async function getAutocompleteExtensionMeta(): Promise<ExtensionMeta[]> {
   const transportOptions = getTransportNames();
+  const transportLabels = getTransportDisplayNames();
   const results: ExtensionMeta[] = [];
 
   for (const p of _all()) {
@@ -335,6 +361,7 @@ export async function getAutocompleteExtensionMeta(): Promise<ExtensionMeta[]> {
     const transportField: SettingField = {
       ...OUTGOING_TRANSPORT_FIELD,
       options: transportOptions,
+      optionLabels: transportLabels,
       default: transportDefault,
     };
 

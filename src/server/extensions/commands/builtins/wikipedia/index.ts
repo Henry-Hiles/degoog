@@ -27,8 +27,14 @@ interface WikiPage {
 }
 
 let _template = "";
+let _signProxyUrl: PluginContext["signProxyUrl"] | null = null;
 
 let _wikiCache!: TtlCache<WikiPage>;
+
+const _proxyImageUrl = (url: string): string => {
+  if (!url || !_signProxyUrl) return "";
+  return _signProxyUrl(url);
+};
 
 async function _fetchWikipedia(query: string): Promise<WikiPage | null> {
   const controller = new AbortController();
@@ -85,11 +91,13 @@ const wikipediaSlot: SlotPlugin = {
     return this.t!("wikipedia.description");
   },
   position: SlotPanelPosition.KnowledgePanel,
+  isClientExposed: false,
 
   t: TranslateFunction,
 
   init(ctx: PluginContext): void {
     _template = ctx.template;
+    if (ctx.signProxyUrl) _signProxyUrl = ctx.signProxyUrl;
     _wikiCache = ctx.createCache<WikiPage>(60 * 60 * 1000);
   },
 
@@ -127,7 +135,7 @@ const wikipediaSlot: SlotPlugin = {
       description: escapeHtml(page.description || ""),
       extract: escapeHtml(page.extract),
       thumbnail: page.thumbnail
-        ? `<img class="wiki-thumb" src="${escapeHtml(page.thumbnail.source)}" alt="${escapeHtml(page.title)}" loading="lazy">`
+        ? `<img class="wiki-thumb" src="${escapeHtml(_proxyImageUrl(page.thumbnail.source))}" alt="${escapeHtml(page.title)}" loading="lazy">`
         : "",
       url: page.fullurl ?? `https://en.wikipedia.org/?curid=${page.pageid}`,
     };

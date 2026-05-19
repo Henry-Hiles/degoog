@@ -21,7 +21,7 @@ import type {
 } from "../types";
 import { fetchViaHttpProxy } from "./http-proxy-fetch";
 import { logger } from "./logger";
-import { getSettings } from "./plugin-settings";
+import { asBoolean, getSettings } from "./plugin-settings";
 import { fetchViaSocks, isSocksProxy } from "./socks-fetch";
 
 export type { TransportFetchOptions as OutgoingFetchOptions };
@@ -36,6 +36,7 @@ export function parseOutgoingTransport(raw: string | undefined): string {
 
 let allowedHosts: Set<string> | null = null;
 
+/** @deprecated Legacy outgoing-fetch allowlist. Sign image URLs with ctx.signProxyUrl instead. */
 export function setOutgoingAllowlist(hosts: string[]): void {
   if (!hosts || hosts.length === 0) {
     allowedHosts = new Set();
@@ -72,6 +73,7 @@ function parseProxyUrlsList(rawList: string[]): string[] {
   return out;
 }
 
+/** @deprecated Legacy outgoing-fetch allowlist. Sign image URLs with ctx.signProxyUrl instead. */
 export function isUrlAllowedForOutgoing(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -143,7 +145,7 @@ async function buildTransportContext(
   const proxyOverrideEnabled = opts?.proxyOverrideEnabled === true;
   const proxyOverrideRaw = opts?.proxyOverrideUrls;
 
-  const globalEnabled = settings.proxyEnabled === "true";
+  const globalEnabled = asBoolean(settings.proxyEnabled);
   const globalProxyUrlsRaw = settings.proxyUrls;
   const globalUrls = parseProxyUrls(
     typeof globalProxyUrlsRaw === "string" ? globalProxyUrlsRaw : "",

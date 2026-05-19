@@ -1,9 +1,10 @@
 import { Hono, type Context } from "hono";
 import { getMiddleware } from "../extensions/middleware/registry";
 import { asString, getSettings } from "../utils/plugin-settings";
-import { isPublicInstance } from "../utils/public-instance";
+import { getAdminPath, isPublicInstance } from "../utils/public-instance";
 import { logger } from "../utils/logger";
 import { getBasePath } from "../utils/base-url";
+import { getClientIp, isHttpsRequest } from "../utils/request";
 import {
   TOKEN_TTL_MS,
   checkAuthRate,
@@ -19,10 +20,23 @@ const COOKIE_NAME = "settings-token";
 const MIDDLEWARE_SETTINGS_ID = "middleware";
 const SETTINGS_GATE_KEY = "settingsGate";
 
-const _clientIp = (c: Context): string =>
-  c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
-  c.req.header("x-real-ip") ||
-  "unknown";
+const buildSessionCookie = (token: string, secure: boolean): string => {
+  const attrs = [
+    `${COOKIE_NAME}=${token}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${TOKEN_TTL_MS / 1000}`,
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+};
+
+const adminSettingsPath = (): string => {
+  const base = getBasePath();
+  const admin = getAdminPath();
+  return base ? `${base}/${admin}` : `/${admin}`;
+};
 
 function getTokenFromCookie(c: Context): string | undefined {
   const raw = c.req.header("cookie");
@@ -96,7 +110,7 @@ export function isPasswordRequired(): boolean {
 }
 
 export async function gandalf(token: string | undefined): Promise<boolean> {
-  if (isPublicInstance()) return false;
+  if (isPublicInstance() && !isPasswordRequired()) return false;
   const required = await isAuthRequired();
   if (!required) return true;
   if (!token) {
@@ -169,7 +183,7 @@ router.get("/api/settings/auth", async (c) => {
 
 router.get("/api/settings/auth/callback", async (c) => {
   const m = await getSelectedMiddlewareForSettingsGate();
-  if (!m) return c.redirect(`${getBasePath()}/settings`);
+  if (!m) return c.redirect(adminSettingsPath());
   const result = await m.handle(c.req.raw, { route: "settings-auth-callback" });
   if (
     result !== null &&
@@ -179,16 +193,20 @@ router.get("/api/settings/auth/callback", async (c) => {
     tokenStore.pruneExpired();
     const sessionToken = generateSettingsToken();
     tokenStore.set(sessionToken, Date.now() + TOKEN_TTL_MS);
-    const sep = result.redirect.includes("?") ? "&" : "?";
-    return c.redirect(`${result.redirect}${sep}token=${sessionToken}`);
+    const cookie = buildSessionCookie(sessionToken, isHttpsRequest(c));
+    return new Response(null, {
+      status: 302,
+      headers: { Location: result.redirect, "Set-Cookie": cookie },
+    });
   }
   if (result instanceof Response) return result;
-  return c.redirect(`${getBasePath()}/settings`);
+  return c.redirect(adminSettingsPath());
 });
 
 router.post("/api/settings/auth", async (c) => {
-  if (isPublicInstance()) return c.json({ error: "You shall not pass!" }, 401);
-  const ip = _clientIp(c);
+  if (isPublicInstance() && !isPasswordRequired())
+    return c.json({ error: "You shall not pass!" }, 401);
+  const ip = getClientIp(c) ?? "unknown";
   const rate = checkAuthRate(ip);
   if (!rate.allowed) {
     logger.warn(
@@ -222,7 +240,7 @@ router.post("/api/settings/auth", async (c) => {
   tokenStore.pruneExpired();
   const token = generateSettingsToken();
   tokenStore.set(token, Date.now() + TOKEN_TTL_MS);
-  const cookie = `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${TOKEN_TTL_MS / 1000}`;
+  const cookie = buildSessionCookie(token, isHttpsRequest(c));
   return c.json({ ok: true, token }, 200, {
     "Set-Cookie": cookie,
   });

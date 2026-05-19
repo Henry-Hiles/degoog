@@ -55,7 +55,9 @@ const registry = createRegistry<QueryInterceptor>({
 });
 
 export const initInterceptors = registry.init;
-export const reloadInterceptors = registry.reload;
+export const reloadInterceptors = async (bust = true): Promise<void> => {
+  await (bust ? registry.reload() : registry.refresh());
+};
 
 export const getInterceptors = (): QueryInterceptor[] =>
   registry.items().sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
@@ -82,6 +84,7 @@ export const getInterceptorMeta = async (): Promise<ExtensionMeta[]> => {
       settingsSchema: schema,
       settings,
       source: "plugin",
+      isClientExposed: interceptor.isClientExposed,
       extensionDocsAvailable: exists,
     });
   }
