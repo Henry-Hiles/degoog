@@ -78,6 +78,12 @@ type PluginLike = {
   settingsSchema?: SettingField[];
 };
 
+const _initedPlugins = new WeakSet<object>();
+
+export const forgetPluginInit = (plugin: object): void => {
+  _initedPlugins.delete(plugin);
+};
+
 export async function loadPluginAssets(
   entryPath: string,
   folderName: string,
@@ -106,7 +112,8 @@ export async function initPlugin(
   fallbackSettingsIds: string[] = [],
 ): Promise<void> {
   const { readFile } = await import("fs/promises");
-  if (plugin.init) {
+  const alreadyInited = _initedPlugins.has(plugin as object);
+  if (plugin.init && !alreadyInited) {
     const ctx: PluginContext = {
       dir: entryPath,
       template,
@@ -117,6 +124,7 @@ export async function initPlugin(
       createCache,
     };
     await Promise.resolve(plugin.init(ctx));
+    _initedPlugins.add(plugin as object);
   }
   if (plugin.configure && plugin.settingsSchema?.length) {
     const stored = fallbackSettingsIds.length

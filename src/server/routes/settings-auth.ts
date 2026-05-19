@@ -4,7 +4,7 @@ import { asString, getSettings } from "../utils/plugin-settings";
 import { getAdminPath, isPublicInstance } from "../utils/public-instance";
 import { logger } from "../utils/logger";
 import { getBasePath } from "../utils/base-url";
-import { getClientIp } from "../utils/request";
+import { getClientIp, isHttpsRequest } from "../utils/request";
 import {
   TOKEN_TTL_MS,
   checkAuthRate,
@@ -19,6 +19,18 @@ const router = new Hono();
 const COOKIE_NAME = "settings-token";
 const MIDDLEWARE_SETTINGS_ID = "middleware";
 const SETTINGS_GATE_KEY = "settingsGate";
+
+const buildSessionCookie = (token: string, secure: boolean): string => {
+  const attrs = [
+    `${COOKIE_NAME}=${token}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${TOKEN_TTL_MS / 1000}`,
+  ];
+  if (secure) attrs.push("Secure");
+  return attrs.join("; ");
+};
 
 const adminSettingsPath = (): string => {
   const base = getBasePath();
@@ -181,8 +193,11 @@ router.get("/api/settings/auth/callback", async (c) => {
     tokenStore.pruneExpired();
     const sessionToken = generateSettingsToken();
     tokenStore.set(sessionToken, Date.now() + TOKEN_TTL_MS);
-    const sep = result.redirect.includes("?") ? "&" : "?";
-    return c.redirect(`${result.redirect}${sep}token=${sessionToken}`);
+    const cookie = buildSessionCookie(sessionToken, isHttpsRequest(c));
+    return new Response(null, {
+      status: 302,
+      headers: { Location: result.redirect, "Set-Cookie": cookie },
+    });
   }
   if (result instanceof Response) return result;
   return c.redirect(adminSettingsPath());
@@ -225,7 +240,7 @@ router.post("/api/settings/auth", async (c) => {
   tokenStore.pruneExpired();
   const token = generateSettingsToken();
   tokenStore.set(token, Date.now() + TOKEN_TTL_MS);
-  const cookie = `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${TOKEN_TTL_MS / 1000}`;
+  const cookie = buildSessionCookie(token, isHttpsRequest(c));
   return c.json({ ok: true, token }, 200, {
     "Set-Cookie": cookie,
   });

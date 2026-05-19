@@ -30,6 +30,39 @@ const getProxyFilename = (originalUrl: string, contentType: string): string => {
 const PROXY_TIMEOUT_MS = 10_000;
 const MAX_CONTENT_LENGTH = 25 * 1024 * 1024;
 const MAX_REDIRECT_HOPS = 5;
+
+const readBodyCapped = async (
+  res: Response,
+  cap: number,
+): Promise<ArrayBuffer | "too-large" | "empty"> => {
+  const reader = res.body?.getReader();
+  if (!reader) return "empty";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > cap) {
+        await reader.cancel().catch(() => {});
+        return "too-large";
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  const out = new ArrayBuffer(total);
+  const view = new Uint8Array(out);
+  let offset = 0;
+  for (const chunk of chunks) {
+    view.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+};
 const ALLOWED_CONTENT_TYPES = [
   "image/jpeg",
   "image/png",
@@ -122,10 +155,9 @@ router.get("/api/proxy/image", async (c) => {
       return c.body("Image too large", 413);
     }
 
-    const body = await res.arrayBuffer();
-    if (body.byteLength > MAX_CONTENT_LENGTH) {
-      return c.body("Image too large", 413);
-    }
+    const body = await readBodyCapped(res, MAX_CONTENT_LENGTH);
+    if (body === "too-large") return c.body("Image too large", 413);
+    if (body === "empty") return c.body("Empty upstream body", 502);
 
     return c.body(body, 200, {
       "Content-Type": contentType,
@@ -140,6 +172,7 @@ router.get("/api/proxy/image", async (c) => {
 });
 
 const FAVICON_TIMEOUT_MS = 5_000;
+const FAVICON_MAX_CONTENT_LENGTH = 512 * 1024;
 const FAVICON_CONTENT_TYPES = ["image/", "text/html"];
 
 router.get("/api/proxy/favicon", async (c) => {
@@ -166,7 +199,8 @@ router.get("/api/proxy/favicon", async (c) => {
       if (!res.ok) continue;
       const contentType = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
       if (!FAVICON_CONTENT_TYPES.some((t) => contentType.startsWith(t))) continue;
-      const body = await res.arrayBuffer();
+      const body = await readBodyCapped(res, FAVICON_MAX_CONTENT_LENGTH);
+      if (body === "too-large" || body === "empty") continue;
       return c.body(body, 200, {
         "Content-Type": contentType || "image/x-icon",
         "Cache-Control": "public, max-age=86400",

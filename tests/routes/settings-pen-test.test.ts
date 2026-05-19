@@ -13,13 +13,16 @@ let settingsRouter: Router;
 
 let savedPublic: string | undefined;
 let savedPasswords: string | undefined;
+let savedDistrust: string | undefined;
 
 beforeAll(async () => {
   savedPublic = process.env.DEGOOG_PUBLIC_INSTANCE;
   savedPasswords = process.env.DEGOOG_SETTINGS_PASSWORDS;
+  savedDistrust = process.env.DEGOOG_DISTRUST_PROXY;
 
   process.env.DEGOOG_PUBLIC_INSTANCE = "true";
   process.env.DEGOOG_SETTINGS_PASSWORDS = CORRECT_PASSWORD;
+  process.env.DEGOOG_DISTRUST_PROXY = "0";
 
   await initServerKey();
 
@@ -41,6 +44,9 @@ afterAll(() => {
   if (savedPasswords !== undefined)
     process.env.DEGOOG_SETTINGS_PASSWORDS = savedPasswords;
   else delete process.env.DEGOOG_SETTINGS_PASSWORDS;
+  if (savedDistrust !== undefined)
+    process.env.DEGOOG_DISTRUST_PROXY = savedDistrust;
+  else delete process.env.DEGOOG_DISTRUST_PROXY;
 });
 
 const authPost = (password: string, ip: string) =>

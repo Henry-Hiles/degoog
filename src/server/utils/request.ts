@@ -4,9 +4,14 @@ interface BunEnv {
   requestIP?: (req: Request) => { address: string } | null;
 }
 
+const _distrustProxy = (): boolean => {
+  const v = process.env.DEGOOG_DISTRUST_PROXY;
+  if (v === undefined) return true;
+  return v !== "false" && v !== "0";
+};
+
 export function getClientIp(c: Context): string | undefined {
-  const distrustProxy = process.env.DEGOOG_DISTRUST_PROXY === "true" || process.env.DEGOOG_DISTRUST_PROXY === "1";
-  if (!distrustProxy) {
+  if (!_distrustProxy()) {
     const forwarded = c.req.header("x-forwarded-for");
     if (forwarded) return forwarded.split(",")[0].trim();
     const realIp = c.req.header("x-real-ip");
@@ -14,4 +19,16 @@ export function getClientIp(c: Context): string | undefined {
   }
   const env = c.env as BunEnv | undefined;
   return env?.requestIP?.(c.req.raw)?.address ?? undefined;
+}
+
+export function isHttpsRequest(c: Context): boolean {
+  if (!_distrustProxy()) {
+    const proto = c.req.header("x-forwarded-proto");
+    if (proto) return proto.split(",")[0].trim().toLowerCase() === "https";
+  }
+  try {
+    return new URL(c.req.url).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
