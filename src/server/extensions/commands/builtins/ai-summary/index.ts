@@ -12,11 +12,18 @@ import {
   type TtlCache,
 } from "../../../../utils/cache";
 import { logger } from "../../../../utils/logger";
-import { asString, getSettings } from "../../../../utils/plugin-settings";
+import { asBoolean, asString, getSettings } from "../../../../utils/plugin-settings";
 
 export const AI_SUMMARY_ID = "ai-summary";
 
 export const aiSummarySettingsSchema: SettingField[] = [
+  {
+    key: "questionMarkOnly",
+    label: "Only trigger on questions (?)",
+    type: "toggle",
+    description:
+      "When enabled, AI summaries only appear when the query ends with a question mark.",
+  },
   {
     key: "baseUrl",
     label: "API Base URL",
@@ -77,6 +84,7 @@ export interface AISummarySettings {
   timeoutMs: number;
   systemPrompt: string;
   maxTokens: number;
+  questionMarkOnly: boolean;
 }
 
 export async function getAISummarySettings(): Promise<AISummarySettings> {
@@ -91,6 +99,7 @@ export async function getAISummarySettings(): Promise<AISummarySettings> {
     timeoutMs: Math.max(5, timeoutSeconds) * 1000,
     systemPrompt: asString(stored["systemPrompt"]),
     maxTokens: Math.max(16, maxTokens),
+    questionMarkOnly: asBoolean(stored["questionMarkOnly"]),
   };
 }
 
@@ -219,9 +228,11 @@ const aiSummarySlot: SlotPlugin = {
 
   t: TranslateFunction,
 
-  async trigger(): Promise<boolean> {
+  async trigger(query: string): Promise<boolean> {
     const settings = await getAISummarySettings();
-    return !!settings.baseUrl && !!settings.model;
+    if (!settings.baseUrl || !settings.model) return false;
+    if (settings.questionMarkOnly && !query.trim().endsWith("?")) return false;
+    return true;
   },
   async execute(query, context): Promise<{ title?: string; html: string }> {
     const results = context?.results ?? [];
