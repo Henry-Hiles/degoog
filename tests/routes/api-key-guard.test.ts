@@ -3,6 +3,7 @@ import {
   test,
   expect,
   beforeAll,
+  beforeEach,
   afterAll,
   afterEach,
 } from "bun:test";
@@ -46,6 +47,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await updateInstanceSettings(_savedSettings);
+});
+
+beforeEach(async () => {
+  await updateInstanceSettings({
+    apiKeySuggestEnabled: false,
+    apiKeySearchEnabled: false,
+  });
 });
 
 afterEach(async () => {
