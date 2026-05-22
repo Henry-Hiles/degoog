@@ -56,7 +56,7 @@ describe("ai-summary questionMarkOnly setting", () => {
       model: "test-model",
       questionMarkOnly: false,
     });
-    const slot = getSlotPluginById("builtin-ai-summary-slot");
+    const slot = getSlotPluginById("ai-summary-slot");
     expect(slot).not.toBeNull();
     expect(await slot!.trigger("best restaurants")).toBe(true);
     expect(await slot!.trigger("best restaurants?")).toBe(true);
@@ -68,7 +68,7 @@ describe("ai-summary questionMarkOnly setting", () => {
       model: "test-model",
       questionMarkOnly: true,
     });
-    const slot = getSlotPluginById("builtin-ai-summary-slot");
+    const slot = getSlotPluginById("ai-summary-slot");
     expect(slot).not.toBeNull();
     expect(await slot!.trigger("best restaurants")).toBe(false);
     expect(await slot!.trigger("  best restaurants  ")).toBe(false);
@@ -80,7 +80,7 @@ describe("ai-summary questionMarkOnly setting", () => {
       model: "test-model",
       questionMarkOnly: true,
     });
-    const slot = getSlotPluginById("builtin-ai-summary-slot");
+    const slot = getSlotPluginById("ai-summary-slot");
     expect(slot).not.toBeNull();
     expect(await slot!.trigger("what are the best restaurants?")).toBe(true);
     expect(await slot!.trigger("why?")).toBe(true);
@@ -92,7 +92,7 @@ describe("ai-summary questionMarkOnly setting", () => {
       model: "",
       questionMarkOnly: false,
     });
-    const slot = getSlotPluginById("builtin-ai-summary-slot");
+    const slot = getSlotPluginById("ai-summary-slot");
     expect(slot).not.toBeNull();
     expect(await slot!.trigger("test?")).toBe(false);
   });

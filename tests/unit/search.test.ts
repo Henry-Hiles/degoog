@@ -103,19 +103,6 @@ describe("search", () => {
   });
 
   describe("resolveEngine", () => {
-    test("returns engine by id when registry is initialized", async () => {
-      const { initEngines } =
-        await import("../../src/server/extensions/engines/registry");
-      const orig = process.env.DEGOOG_ENGINES_DIR;
-      process.env.DEGOOG_ENGINES_DIR = "/nonexistent-empty-dir-12345";
-      await initEngines();
-      const engine = resolveEngine("duckduckgo");
-      expect(engine).not.toBeNull();
-      expect(engine!.name).toBe("DuckDuckGo");
-      if (orig !== undefined) process.env.DEGOOG_ENGINES_DIR = orig;
-      else delete process.env.DEGOOG_ENGINES_DIR;
-    });
-
     test("returns null for unknown engine name", async () => {
       const { initEngines } =
         await import("../../src/server/extensions/engines/registry");

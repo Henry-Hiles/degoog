@@ -11,21 +11,20 @@ import {
   initServerKey,
 } from "../../src/server/utils/server-key";
 import {
-  getSettings,
-  setSettings,
-} from "../../src/server/utils/plugin-settings";
+  getInstanceSettings,
+  updateInstanceSettings,
+  type ServerSettingValue,
+} from "../../src/server/utils/server-settings";
 
 type Router = {
   request: (req: Request | string) => Response | Promise<Response>;
 };
 
-const SETTINGS_ID = "degoog-settings";
-
 let suggestRouter: Router;
 let searchRouter: Router;
 let streamRouter: Router;
 
-let _savedSettings: Record<string, unknown> = {};
+let _savedSettings: Record<string, ServerSettingValue> = {};
 
 beforeAll(async () => {
   await initServerKey();
@@ -38,19 +37,19 @@ beforeAll(async () => {
   searchRouter = searchMod.default;
   streamRouter = streamMod.default;
 
-  const s = await getSettings(SETTINGS_ID);
+  const s = await getInstanceSettings();
   _savedSettings = {
-    apiKeySuggestEnabled: s.apiKeySuggestEnabled,
-    apiKeySearchEnabled: s.apiKeySearchEnabled,
+    apiKeySuggestEnabled: s.apiKeySuggestEnabled ?? false,
+    apiKeySearchEnabled: s.apiKeySearchEnabled ?? false,
   };
 });
 
 afterAll(async () => {
-  await setSettings(SETTINGS_ID, _savedSettings as Record<string, string>);
+  await updateInstanceSettings(_savedSettings);
 });
 
 afterEach(async () => {
-  await setSettings(SETTINGS_ID, {
+  await updateInstanceSettings({
     apiKeySuggestEnabled: false,
     apiKeySearchEnabled: false,
   });
@@ -63,7 +62,7 @@ const _bearer = (): Record<string, string> => {
 };
 
 const _enable = async (key: "apiKeySuggestEnabled" | "apiKeySearchEnabled") =>
-  setSettings(SETTINGS_ID, { [key]: true });
+  updateInstanceSettings({ [key]: true });
 
 const _get = (
   router: Router,
@@ -135,7 +134,7 @@ describe("guardApiKey - suggest endpoints", () => {
 
   describe("protection enabled - boolean true (not string) still gates", () => {
     test("GET /api/suggest blocked with boolean true setting", async () => {
-      await setSettings(SETTINGS_ID, { apiKeySuggestEnabled: true });
+      await updateInstanceSettings({ apiKeySuggestEnabled: true });
       const res = await _get(suggestRouter, "/api/suggest?q=x");
       expect(res.status).toBe(401);
     });
@@ -143,7 +142,7 @@ describe("guardApiKey - suggest endpoints", () => {
 
   describe("protection enabled - boolean false allows through", () => {
     test("GET /api/suggest passes with boolean false setting", async () => {
-      await setSettings(SETTINGS_ID, { apiKeySuggestEnabled: false });
+      await updateInstanceSettings({ apiKeySuggestEnabled: false });
       const res = await _get(suggestRouter, "/api/suggest?q=x");
       expect(res.status).not.toBe(401);
     });
@@ -333,7 +332,7 @@ describe("guardApiKey - POST body attacks when protection disabled", () => {
 
 describe("guardApiKey - suggest and search use independent keys", () => {
   test("suggest protected, search open - suggest blocked, search passes", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: true,
       apiKeySearchEnabled: false,
     });
@@ -344,7 +343,7 @@ describe("guardApiKey - suggest and search use independent keys", () => {
   });
 
   test("search protected, suggest open - search blocked, suggest passes", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: false,
       apiKeySearchEnabled: true,
     });
@@ -355,7 +354,7 @@ describe("guardApiKey - suggest and search use independent keys", () => {
   });
 
   test("both protected - both blocked without auth", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: true,
       apiKeySearchEnabled: true,
     });
@@ -366,7 +365,7 @@ describe("guardApiKey - suggest and search use independent keys", () => {
   });
 
   test("both protected - same key unlocks both", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: true,
       apiKeySearchEnabled: true,
     });
