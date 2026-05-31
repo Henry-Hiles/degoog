@@ -131,7 +131,7 @@ const EXACT_SQL = `
   FROM query_hits h
   JOIN urls u ON u.id = h.url_id
   WHERE h.query_norm = ? AND h.engine_type = ?
-  ORDER BY h.last_seen DESC
+  ORDER BY h.best_position ASC, h.hit_count DESC, h.last_seen DESC
   LIMIT ?
 `;
 

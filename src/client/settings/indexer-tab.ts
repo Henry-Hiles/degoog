@@ -346,7 +346,7 @@ const MANAGE_BODY = `
       class="degoog-input"
       placeholder=""
     />
-    <select id="indexer-manage-type" class="degoog-input degoog-manage-type-select">
+    <select id="indexer-manage-type" class="degoog-input">
       <option value=""></option>
     </select>
   </div>
@@ -461,6 +461,9 @@ const openManageModal = (stats: IndexerStats | null, onChanged: () => void): voi
   const statusEl = document.getElementById("ext-modal-status");
   if (!overlay || !titleEl || !bodyEl || !statusEl) return;
 
+  const modal = document.getElementById("ext-modal");
+  modal?.classList.add("ext-modal--wide");
+
   titleEl.textContent = tr("manage-title");
   bodyEl.innerHTML = MANAGE_BODY;
   statusEl.textContent = "";
@@ -484,6 +487,7 @@ const openManageModal = (stats: IndexerStats | null, onChanged: () => void): voi
   if (titleHead) titleHead.textContent = tr("manage-col-title");
   if (prevBtn) prevBtn.textContent = tr("manage-prev");
   if (nextBtn) nextBtn.textContent = tr("manage-next");
+  if (typeEl?.options[0]) typeEl.options[0].textContent = tr("manage-type-all");
 
   const knownTypes = Object.keys(stats?.byType ?? {});
   if (typeEl) {
@@ -510,6 +514,7 @@ const openManageModal = (stats: IndexerStats | null, onChanged: () => void): voi
   let dirty = false;
 
   const close = (): void => {
+    modal?.classList.remove("ext-modal--wide");
     overlay.style.display = "none";
     statusEl.textContent = "";
     bodyEl.innerHTML = "";

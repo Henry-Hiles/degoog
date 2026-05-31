@@ -672,6 +672,27 @@
   }
 }
 
+.degoog-manage-filters {
+  display: flex;
+  gap: $space-3;
+  align-items: center;
+
+  .degoog-input {
+    background: var(--bg);
+  }
+
+  input[type="search"] {
+    flex: 1;
+    min-width: 0;
+  }
+
+  select {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 8rem;
+  }
+}
+
 .degoog-manage-table {
   width: 100%;
   border-collapse: collapse;
@@ -681,13 +702,22 @@
   th,
   td {
     text-align: left;
-    padding: $space-2;
+    padding: $space-2 $space-3;
     vertical-align: middle;
   }
 
   th {
     color: var(--text-secondary);
     font-weight: 500;
+  }
+
+  td:last-child {
+    white-space: nowrap;
+    width: 1%;
+  }
+
+  td:first-child {
+    width: 1%;
   }
 
   tbody tr {
@@ -710,4 +740,8 @@
 
 .degoog-manage-pager {
   justify-content: space-between;
+}
+
+.ext-modal--wide {
+  width: min(56rem, 92vw);
 }

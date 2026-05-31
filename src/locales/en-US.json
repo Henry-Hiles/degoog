@@ -293,6 +293,7 @@
       "manage-btn": "Manage index",
       "manage-title": "Manage indexed results",
       "manage-search-placeholder": "Search indexed results...",
+      "manage-type-all": "All types",
       "manage-col-query": "Query",
       "manage-col-type": "Type",
       "manage-col-title": "Result",

@@ -14,6 +14,7 @@ export interface IndexRow {
   is_gif: number | null;
   duration: string | null;
   extras_json: string | null;
+  position: number;
 }
 
 export interface Recorder {
@@ -44,7 +45,8 @@ const extractExtras = (r: SearchResult): string | null => {
 export const DEFAULT_RECORDER: Recorder = {
   toRows: (queryNorm, engineType, results) => {
     const rows: IndexRow[] = [];
-    for (const r of results) {
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
       if (!r.url || !r.title) continue;
       rows.push({
         query_norm: queryNorm,
@@ -60,6 +62,7 @@ export const DEFAULT_RECORDER: Recorder = {
           r.isGif === true || urlIsGif(r.imageUrl) ? 1 : r.isGif === false ? 0 : null,
         duration: r.duration ?? null,
         extras_json: extractExtras(r),
+        position: i,
       });
     }
     return rows;

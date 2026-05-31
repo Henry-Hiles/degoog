@@ -54,10 +54,12 @@ const UPSERT_URL = `
 `;
 
 const UPSERT_HIT = `
-  INSERT INTO query_hits (query_norm, engine_type, url_id, first_seen, last_seen)
-  VALUES ($query_norm, $engine_type, $url_id, $first_seen, $last_seen)
+  INSERT INTO query_hits (query_norm, engine_type, url_id, best_position, hit_count, first_seen, last_seen)
+  VALUES ($query_norm, $engine_type, $url_id, $best_position, 1, $first_seen, $last_seen)
   ON CONFLICT(query_norm, engine_type, url_id) DO UPDATE SET
-    last_seen = excluded.last_seen
+    last_seen = excluded.last_seen,
+    best_position = MIN(query_hits.best_position, excluded.best_position),
+    hit_count = query_hits.hit_count + 1
 `;
 
 const getStmts = (type: string): { upsertUrl: Statement; upsertHit: Statement } => {
@@ -100,6 +102,7 @@ const writeRow = (
     $query_norm: row.query_norm,
     $engine_type: row.engine_type,
     $url_id: urlIdRow.id,
+    $best_position: row.position,
     $first_seen: now,
     $last_seen: now,
   });
