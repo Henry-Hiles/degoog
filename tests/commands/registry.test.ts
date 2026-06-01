@@ -3,6 +3,7 @@ import {
   initPlugins,
   getFilteredCommandRegistry,
   getCommandInstanceById,
+  getCommandRegistry,
   matchBangCommand,
 } from "../../src/server/extensions/commands/registry";
 
@@ -28,8 +29,8 @@ describe("commands registry", () => {
     expect(reg.length).toBeGreaterThan(0);
   });
 
-  test("getCommandInstanceById returns help command", () => {
-    const cmd = getCommandInstanceById("help");
+  test("getCommandInstanceById returns help command by -command id", () => {
+    const cmd = getCommandInstanceById("help-command");
     expect(cmd).toBeDefined();
     expect(cmd!.trigger).toBe("help");
   });
@@ -47,5 +48,36 @@ describe("commands registry", () => {
   test("matchBangCommand returns null for non-bang", () => {
     expect(matchBangCommand("help")).toBeNull();
     expect(matchBangCommand("foo")).toBeNull();
+  });
+
+  test("matchBangCommand parses trailing bang: 'some query !help'", () => {
+    const match = matchBangCommand("some query !help");
+    expect(match).not.toBeNull();
+    if (!match) return;
+    expect(match.type).toBe("command");
+    if (match.type === "command") {
+      expect(match.command.trigger).toBe("help");
+      expect(match.args).toBe("some query");
+    }
+  });
+
+  test("matchBangCommand trailing bang returns null without space before !", () => {
+    expect(matchBangCommand("foo!help")).toBeNull();
+  });
+
+  test("loaded commands have no duplicate triggers", () => {
+    const reg = getCommandRegistry();
+    const builtinTriggers = reg
+      .filter((c) => c.category !== "Engine shortcuts")
+      .map((c) => c.trigger);
+    const unique = new Set(builtinTriggers);
+    expect(unique.size).toBe(builtinTriggers.length);
+  });
+
+  test("matchBangCommand leading bang still takes priority", () => {
+    const match = matchBangCommand("!help trailing text");
+    expect(match).not.toBeNull();
+    if (!match || match.type !== "command") return;
+    expect(match.args).toBe("trailing text");
   });
 });

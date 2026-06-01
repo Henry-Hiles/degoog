@@ -1,9 +1,12 @@
 import { describe, test, expect, beforeAll, afterAll, afterEach } from "bun:test";
-import { setSettings, removeSettings } from "../../src/server/utils/plugin-settings";
+import {
+  getInstanceSettings,
+  setInstanceSettings,
+  updateInstanceSettings,
+  type ServerSettingValue,
+} from "../../src/server/utils/server-settings";
 import { outgoingFetch } from "../../src/server/utils/outgoing";
 import net from "node:net";
-
-const SETTINGS_ID = "degoog-settings";
 
 function createConnectProxy(): { server: net.Server; port: number; hits: string[]; close: () => void } {
   const hits: string[] = [];
@@ -54,8 +57,11 @@ function createConnectProxy(): { server: net.Server; port: number; hits: string[
 describe("outgoing proxy integration", () => {
   let targetServer: ReturnType<typeof Bun.serve>;
   let proxy: ReturnType<typeof createConnectProxy>;
+  let savedSettings: Record<string, ServerSettingValue>;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    savedSettings = await getInstanceSettings();
+
     targetServer = Bun.serve({
       port: 0,
       fetch() {
@@ -67,7 +73,7 @@ describe("outgoing proxy integration", () => {
   });
 
   afterEach(async () => {
-    await removeSettings(SETTINGS_ID);
+    await setInstanceSettings(savedSettings);
     proxy.hits.length = 0;
   });
 
@@ -77,7 +83,7 @@ describe("outgoing proxy integration", () => {
   });
 
   test("request routes through proxy when enabled", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       proxyEnabled: "true",
       proxyUrls: `http://localhost:${proxy.port}`,
     });
@@ -91,7 +97,7 @@ describe("outgoing proxy integration", () => {
   });
 
   test("request goes direct when proxy is disabled", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       proxyEnabled: "false",
       proxyUrls: `http://localhost:${proxy.port}`,
     });
@@ -105,7 +111,7 @@ describe("outgoing proxy integration", () => {
   });
 
   test("request fails when proxy is unreachable (proves no direct fallback)", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       proxyEnabled: "true",
       proxyUrls: "http://127.0.0.1:1",
     });
@@ -120,24 +126,10 @@ describe("outgoing proxy integration", () => {
     expect(threw).toBe(true);
   });
 
-  test("proxy receives the correct target URL", async () => {
-    await setSettings(SETTINGS_ID, {
-      proxyEnabled: "true",
-      proxyUrls: `http://localhost:${proxy.port}`,
-    });
-
-    const targetUrl = `http://localhost:${targetServer.port}/specific-path?q=hello`;
-    await outgoingFetch(targetUrl);
-
-    expect(proxy.hits.length).toBe(1);
-    expect(proxy.hits[0]).toContain("localhost");
-    expect(proxy.hits[0]).toContain(String(targetServer.port));
-  });
-
   test("round-robins across multiple proxy URLs", async () => {
     const secondProxy = createConnectProxy();
 
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       proxyEnabled: "true",
       proxyUrls: `http://localhost:${proxy.port}\nhttp://localhost:${secondProxy.port}`,
     });

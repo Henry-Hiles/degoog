@@ -204,11 +204,16 @@
       "group-themes": "ערכות נושא",
       "apply-failed": "נכשל",
       "save-defaults": "שמור כברירות מחדל עבור המופע",
+      "tabs-heading": "לשוניות חיפוש",
+      "tabs-desc": "הגדר מנועים מופעלים כברירת מחדל והתאם אישית את סדר לשוניות התוצאות.",
+      "order-tabs": "סדר לשוניות",
       "exposure-exposed": "הדפדפן עשוי לפנות לשירותים חיצוניים ישירות",
       "exposure-safe": "בקשות הדפדפן עוברות דרך השרת",
       "exposure-unknown": "התנהגות הרשת לא הוצהרה",
       "status-configured": "מוגדר",
-      "status-needs-config": "נדרשת הגדרה"
+      "status-needs-config": "נדרשת הגדרה",
+      "extra-types": "סוגים נוספים:",
+      "requires-newer-version": "נדרשת גרסה חדשה יותר של Degoog"
     },
     "errors": {
       "load-extensions": "טעינת התוספים נכשלה.",

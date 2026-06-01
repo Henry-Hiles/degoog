@@ -1,4 +1,4 @@
-import type { CreateCache } from "../utils/cache";
+import type { CreateCache, UseCache } from "../utils/cache";
 import type { SettingValue } from "../utils/plugin-settings";
 import type {
   SearchResult,
@@ -15,22 +15,22 @@ export interface Translate {
   (
     key: string,
     vars?: Record<string, TranslationVars> | TranslationVars[],
+    locale?: string,
   ): string;
-  setLocale(locale: string): void;
-  locale: string;
-  translations?: TranslationRecord;
+  defaultLocale: string;
+  translations: TranslationRecord;
 }
 export const TranslateFunction: Translate = Object.assign(
   function (
     key: string,
     _vars?: Record<string, TranslationVars> | TranslationVars[],
+    _locale?: string,
   ): string {
     return key;
   },
   {
-    setLocale(_locale: string) { },
-    locale: "",
-    translations: undefined as TranslationRecord | undefined,
+    defaultLocale: "",
+    translations: {} as TranslationRecord,
   },
 );
 
@@ -65,11 +65,20 @@ export interface SettingField {
   visibleWhen?: { key: string; equals: string };
 }
 
+export interface PluginManifest {
+  id: string;
+  name: string;
+  description?: string;
+  settingsSchema?: SettingField[];
+  configure?(settings: Record<string, SettingValue>): void;
+}
+
 export interface ExtensionMeta {
   id: string;
   displayName: string;
   description: string;
-  searchType?: string;
+  primaryType?: string;
+  searchTypes?: string[];
   type: ExtensionStoreType | "command" | "interceptor";
   trigger?: string;
   configurable: boolean;
@@ -84,12 +93,18 @@ export interface ExtensionMeta {
 }
 
 export interface PluginContext {
+  id: string;
+  pluginId: string;
+  apiBase: string;
+  routeUrl: (path?: string) => string;
   dir: string;
   template: string;
   readFile: (filename: string) => Promise<string>;
   signProxyUrl: (url: string) => string;
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** @deprecated Use `useCache` (async, namespaced, Valkey-backed when enabled). */
   createCache: CreateCache;
+  useCache: UseCache;
 }
 
 export interface SearchEngine {
@@ -109,7 +124,10 @@ export interface SearchEngine {
 export interface AutocompleteContext {
   fetch: typeof fetch;
   lang?: string;
+  userAgent?: () => string;
+  /** @deprecated Use `useCache` (async, namespaced, Valkey-backed when enabled). */
   createCache: CreateCache;
+  useCache: UseCache;
 }
 
 export interface RichSuggestion {
@@ -156,7 +174,9 @@ export interface SlotPluginContext {
   results?: ScoredResult[];
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   signProxyUrl?: (url: string) => string;
+  /** @deprecated Use `useCache` (async, namespaced, Valkey-backed when enabled). */
   createCache: CreateCache;
+  useCache: UseCache;
 }
 
 export interface SlotPlugin {
@@ -166,7 +186,6 @@ export interface SlotPlugin {
   position: SlotPanelPosition;
   slotPositions?: SlotPanelPosition[];
   settingsId?: string;
-  settingsFallbackIds?: string[];
   isClientExposed?: boolean;
   priority?: number;
   trigger: (query: string) => boolean | Promise<boolean>;
@@ -180,6 +199,7 @@ export interface SlotPlugin {
   configure?(settings: Record<string, SettingValue>): void;
   init?(context: PluginContext): void | Promise<void>;
   t?: Translate;
+  pluginManifest?: PluginManifest;
 }
 
 export interface CommandResult {
@@ -217,7 +237,6 @@ export interface SearchResultTab {
   engineType?: string;
   isClientExposed?: boolean;
   settingsId?: string;
-  settingsFallbackIds?: string[];
   executeSearch?(
     query: string,
     page?: number,
@@ -237,7 +256,6 @@ export interface RequestMiddleware {
   id?: string;
   name: string;
   settingsId?: string;
-  settingsFallbackIds?: string[];
   isClientExposed?: boolean;
   settingsSchema?: SettingField[];
   configure?(settings: Record<string, SettingValue>): void;
@@ -304,13 +322,22 @@ export interface Transport {
   ): Promise<Response>;
 }
 
+export interface InterceptorOverrides {
+  searchType?: string;
+  lang?: string;
+  timeFilter?: string;
+}
+
 export interface InterceptorResult {
   query: string;
+  overrides?: InterceptorOverrides;
 }
 
 export interface QueryInterceptorContext {
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** @deprecated Use `useCache` (async, namespaced, Valkey-backed when enabled). */
   createCache: CreateCache;
+  useCache: UseCache;
   lang?: string;
 }
 
@@ -328,6 +355,7 @@ export interface QueryInterceptor {
     context?: QueryInterceptorContext,
   ): Promise<InterceptorResult>;
   t?: Translate;
+  pluginManifest?: PluginManifest;
 }
 
 export interface UovadipasquaSearchQueryTrigger {

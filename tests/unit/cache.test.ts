@@ -4,10 +4,7 @@ import {
   clear,
   get,
   hasFailedEngines,
-  NEWS_TTL_MS,
   set,
-  SHORT_TTL_MS,
-  TTL_MS,
 } from "../../src/server/utils/cache";
 
 const mockResponse = (timings: { resultCount: number }[]): SearchResponse => ({
@@ -24,33 +21,33 @@ const mockResponse = (timings: { resultCount: number }[]): SearchResponse => ({
 });
 
 describe("cache", () => {
-  beforeEach(() => {
-    clear();
+  beforeEach(async () => {
+    await clear();
   });
 
   describe("get / set / clear", () => {
-    test("returns null for missing key", () => {
-      expect(get("missing")).toBe(null);
+    test("returns null for missing key", async () => {
+      expect(await get("missing")).toBe(null);
     });
 
-    test("returns value after set", () => {
+    test("returns value after set", async () => {
       const res = mockResponse([{ resultCount: 5 }]);
-      set("k1", res);
-      expect(get("k1")).toEqual(res);
+      await set("k1", res);
+      expect(await get("k1")).toEqual(res);
     });
 
-    test("clear removes all entries", () => {
-      set("k1", mockResponse([{ resultCount: 1 }]));
-      clear();
-      expect(get("k1")).toBe(null);
+    test("clear removes all entries", async () => {
+      await set("k1", mockResponse([{ resultCount: 1 }]));
+      await clear();
+      expect(await get("k1")).toBe(null);
     });
 
     test("returns null after TTL expires", async () => {
       const res = mockResponse([{ resultCount: 1 }]);
-      set("k1", res, 50);
-      expect(get("k1")).toEqual(res);
+      await set("k1", res, 50);
+      expect(await get("k1")).toEqual(res);
       await Bun.sleep(60);
-      expect(get("k1")).toBe(null);
+      expect(await get("k1")).toBe(null);
     });
   });
 
@@ -66,12 +63,4 @@ describe("cache", () => {
     });
   });
 
-  describe("TTL constants", () => {
-    test("exports expected TTL constants", () => {
-      expect(typeof TTL_MS).toBe("number");
-      expect(typeof SHORT_TTL_MS).toBe("number");
-      expect(typeof NEWS_TTL_MS).toBe("number");
-      expect(TTL_MS).toBeGreaterThan(SHORT_TTL_MS);
-    });
-  });
 });

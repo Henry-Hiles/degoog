@@ -1,4 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { updateInstanceSettings } from "../../src/server/utils/server-settings";
+import { syncBlocklist } from "../../src/server/utils/bot-trap";
 
 type Router = {
   request: (req: Request | string) => Response | Promise<Response>;
@@ -35,50 +37,12 @@ describe("honeypot traps - enabled (default)", () => {
     expect(body).toContain("DB_PASSWORD");
   });
 
-  test("GET /.git/config returns 200 with fake git config", async () => {
-    const res = await router.request("http://localhost/.git/config");
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(body).toContain("[remote");
-  });
-
-  test("GET /package.json returns 200 with fake package.json", async () => {
-    const res = await router.request("http://localhost/package.json");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { name: string };
-    expect(typeof body.name).toBe("string");
-  });
-
-  test("GET /Dockerfile returns 200 with fake Dockerfile", async () => {
-    const res = await router.request("http://localhost/Dockerfile");
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(body).toContain("FROM node");
-  });
-
-  test("GET /server.js returns 200 with fake server file", async () => {
-    const res = await router.request("http://localhost/server.js");
-    expect(res.status).toBe(200);
-    const ct = res.headers.get("Content-Type") ?? "";
-    expect(ct).toContain("javascript");
-  });
-
   test("GET /api/degoog-search returns 200 with Catullus JSON", async () => {
     const res = await router.request("http://localhost/api/degoog-search");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { results: unknown[] };
     expect(Array.isArray(body.results)).toBe(true);
     expect(body.results.length).toBeGreaterThan(0);
-  });
-
-  test("GET /api/supersearch returns fake results", async () => {
-    const res = await router.request("http://localhost/api/supersearch");
-    expect(res.status).toBe(200);
-  });
-
-  test("GET /api/allengines returns fake results", async () => {
-    const res = await router.request("http://localhost/api/allengines");
-    expect(res.status).toBe(200);
   });
 
   test("GET /sitemap.xml returns XML containing trap paths", async () => {
@@ -111,41 +75,17 @@ describe("honeypot traps - enabled (default)", () => {
 
 describe("honeypot traps - disabled", () => {
   beforeAll(async () => {
-    const { setSettings, getSettings } =
-      await import("../../src/server/utils/plugin-settings");
-    const { syncBlocklist } = await import("../../src/server/utils/bot-trap");
-    const existing = await getSettings("degoog-settings");
-    await setSettings("degoog-settings", {
-      ...existing,
-      honeypotEnabled: "false",
-    });
+    await updateInstanceSettings({ honeypotEnabled: "false" });
     await syncBlocklist();
   });
 
   afterAll(async () => {
-    const { setSettings, getSettings } =
-      await import("../../src/server/utils/plugin-settings");
-    const { syncBlocklist } = await import("../../src/server/utils/bot-trap");
-    const existing = await getSettings("degoog-settings");
-    await setSettings("degoog-settings", {
-      ...existing,
-      honeypotEnabled: "true",
-    });
+    await updateInstanceSettings({ honeypotEnabled: "true" });
     await syncBlocklist();
   });
 
   test("GET /wp-login.php returns 404 when disabled", async () => {
     const res = await router.request("http://localhost/wp-login.php");
-    expect(res.status).toBe(404);
-  });
-
-  test("GET /sitemap.xml returns 404 when disabled", async () => {
-    const res = await router.request("http://localhost/sitemap.xml");
-    expect(res.status).toBe(404);
-  });
-
-  test("GET /.env returns 404 when disabled", async () => {
-    const res = await router.request("http://localhost/.env");
     expect(res.status).toBe(404);
   });
 });

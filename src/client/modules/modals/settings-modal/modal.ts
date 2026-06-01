@@ -205,8 +205,8 @@ export function openModal(ext: ExtensionMeta): void {
           .join("")}</div>
       </div>`;
     }
-    if (ext.id.startsWith("transport-") && ext.configurable) {
-      const transportName = ext.id.slice(10);
+    if (ext.id.endsWith("-transport") && ext.configurable) {
+      const transportName = ext.id;
       html += `<div class="ext-test-connection">
         <button type="button" class="ext-test-btn" data-transport="${transportName}">${t("settings-page.modal.test-connection")}</button>
         <span class="ext-test-result"></span>
@@ -250,7 +250,22 @@ export function openModal(ext: ExtensionMeta): void {
 export function closeModal(): void {
   if (overlay) overlay.style.display = "none";
   currentExt = null;
+  if (saveBtn) saveBtn.style.display = "";
   if (statusEl) statusEl.textContent = "";
+}
+
+export function openCustomModal(options: {
+  title: string;
+  body: string;
+}): void {
+  currentExt = null;
+  const docs = docsBtn;
+  if (docs) docs.style.display = "none";
+  if (saveBtn) saveBtn.style.display = "none";
+  if (titleEl) titleEl.textContent = options.title;
+  if (bodyEl) bodyEl.innerHTML = options.body;
+  if (statusEl) statusEl.textContent = "";
+  if (overlay) overlay.style.display = "flex";
 }
 
 async function _save(): Promise<void> {

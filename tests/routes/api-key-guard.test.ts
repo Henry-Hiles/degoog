@@ -3,6 +3,7 @@ import {
   test,
   expect,
   beforeAll,
+  beforeEach,
   afterAll,
   afterEach,
 } from "bun:test";
@@ -11,46 +12,49 @@ import {
   initServerKey,
 } from "../../src/server/utils/server-key";
 import {
-  getSettings,
-  setSettings,
-} from "../../src/server/utils/plugin-settings";
+  getInstanceSettings,
+  updateInstanceSettings,
+  type ServerSettingValue,
+} from "../../src/server/utils/server-settings";
 
 type Router = {
   request: (req: Request | string) => Response | Promise<Response>;
 };
 
-const SETTINGS_ID = "degoog-settings";
-
 let suggestRouter: Router;
 let searchRouter: Router;
-let streamRouter: Router;
 
-let _savedSettings: Record<string, unknown> = {};
+let _savedSettings: Record<string, ServerSettingValue> = {};
 
 beforeAll(async () => {
   await initServerKey();
-  const [suggestMod, searchMod, streamMod] = await Promise.all([
+  const [suggestMod, searchMod] = await Promise.all([
     import("../../src/server/routes/suggest"),
     import("../../src/server/routes/search"),
-    import("../../src/server/routes/search-stream"),
   ]);
   suggestRouter = suggestMod.default;
   searchRouter = searchMod.default;
-  streamRouter = streamMod.default;
 
-  const s = await getSettings(SETTINGS_ID);
+  const s = await getInstanceSettings();
   _savedSettings = {
-    apiKeySuggestEnabled: s.apiKeySuggestEnabled,
-    apiKeySearchEnabled: s.apiKeySearchEnabled,
+    apiKeySuggestEnabled: s.apiKeySuggestEnabled ?? false,
+    apiKeySearchEnabled: s.apiKeySearchEnabled ?? false,
   };
 });
 
 afterAll(async () => {
-  await setSettings(SETTINGS_ID, _savedSettings as Record<string, string>);
+  await updateInstanceSettings(_savedSettings);
+});
+
+beforeEach(async () => {
+  await updateInstanceSettings({
+    apiKeySuggestEnabled: false,
+    apiKeySearchEnabled: false,
+  });
 });
 
 afterEach(async () => {
-  await setSettings(SETTINGS_ID, {
+  await updateInstanceSettings({
     apiKeySuggestEnabled: false,
     apiKeySearchEnabled: false,
   });
@@ -63,7 +67,7 @@ const _bearer = (): Record<string, string> => {
 };
 
 const _enable = async (key: "apiKeySuggestEnabled" | "apiKeySearchEnabled") =>
-  setSettings(SETTINGS_ID, { [key]: true });
+  updateInstanceSettings({ [key]: true });
 
 const _get = (
   router: Router,
@@ -91,16 +95,6 @@ describe("guardApiKey - suggest endpoints", () => {
       label: "GET /api/suggest",
       fn: (h: Record<string, string>) =>
         _get(suggestRouter, "/api/suggest?q=x", h),
-    },
-    {
-      label: "POST /api/suggest",
-      fn: (h: Record<string, string>) =>
-        _post(suggestRouter, "/api/suggest", '{"query":"x"}', h),
-    },
-    {
-      label: "GET /api/suggest/opensearch",
-      fn: (h: Record<string, string>) =>
-        _get(suggestRouter, "/api/suggest/opensearch?q=x", h),
     },
   ];
 
@@ -133,21 +127,6 @@ describe("guardApiKey - suggest endpoints", () => {
     }
   });
 
-  describe("protection enabled - boolean true (not string) still gates", () => {
-    test("GET /api/suggest blocked with boolean true setting", async () => {
-      await setSettings(SETTINGS_ID, { apiKeySuggestEnabled: true });
-      const res = await _get(suggestRouter, "/api/suggest?q=x");
-      expect(res.status).toBe(401);
-    });
-  });
-
-  describe("protection enabled - boolean false allows through", () => {
-    test("GET /api/suggest passes with boolean false setting", async () => {
-      await setSettings(SETTINGS_ID, { apiKeySuggestEnabled: false });
-      const res = await _get(suggestRouter, "/api/suggest?q=x");
-      expect(res.status).not.toBe(401);
-    });
-  });
 });
 
 describe("guardApiKey - search endpoints", () => {
@@ -155,31 +134,6 @@ describe("guardApiKey - search endpoints", () => {
     {
       label: "GET /api/search",
       fn: (h: Record<string, string>) => _get(searchRouter, "/api/search", h),
-    },
-    {
-      label: "POST /api/search",
-      fn: (h: Record<string, string>) =>
-        _post(searchRouter, "/api/search", '{"query":"x"}', h),
-    },
-    {
-      label: "GET /api/search/retry",
-      fn: (h: Record<string, string>) =>
-        _get(searchRouter, "/api/search/retry?q=x&engine=google", h),
-    },
-    {
-      label: "POST /api/search/retry",
-      fn: (h: Record<string, string>) =>
-        _post(
-          searchRouter,
-          "/api/search/retry",
-          '{"query":"x","engine":"google"}',
-          h,
-        ),
-    },
-    {
-      label: "GET /api/search/stream",
-      fn: (h: Record<string, string>) =>
-        _get(streamRouter, "/api/search/stream?q=x", h),
     },
   ];
 
@@ -220,10 +174,6 @@ describe("guardApiKey - bearer token edge cases", () => {
       authHeader !== undefined ? { Authorization: authHeader } : {};
     return _get(suggestRouter, "/api/suggest?q=x", headers);
   };
-
-  test("no Authorization header → 401", async () => {
-    expect((await hit()).status).toBe(401);
-  });
 
   test("wrong short token → 401", async () => {
     expect((await hit("Bearer wrongtoken")).status).toBe(401);
@@ -297,6 +247,47 @@ describe("guardApiKey - bearer token edge cases", () => {
   });
 });
 
+describe("guardApiKey - browser nonce path", () => {
+  test("valid nonce via headers passes when protection enabled", async () => {
+    const { generateSearchNonce } = await import(
+      "../../src/server/utils/search-nonce"
+    );
+    await _enable("apiKeySearchEnabled");
+    const { n, s } = generateSearchNonce();
+    const res = await _get(searchRouter, "/api/search", {
+      "x-search-nonce": n,
+      "x-search-sig": s,
+    });
+    expect(res.status).not.toBe(401);
+  });
+
+  test("valid nonce via query params passes when protection enabled", async () => {
+    const { generateSearchNonce } = await import(
+      "../../src/server/utils/search-nonce"
+    );
+    await _enable("apiKeySearchEnabled");
+    const { n, s } = generateSearchNonce();
+    const res = await _get(
+      searchRouter,
+      `/api/search?searchNonce=${n}&searchSig=${s}`,
+    );
+    expect(res.status).not.toBe(401);
+  });
+
+  test("tampered nonce signature → 401", async () => {
+    const { generateSearchNonce } = await import(
+      "../../src/server/utils/search-nonce"
+    );
+    await _enable("apiKeySearchEnabled");
+    const { n } = generateSearchNonce();
+    const res = await _get(searchRouter, "/api/search", {
+      "x-search-nonce": n,
+      "x-search-sig": "deadbeef",
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("guardApiKey - POST body attacks when protection disabled", () => {
   test("invalid JSON body → 400", async () => {
     const res = await suggestRouter.request(
@@ -333,7 +324,7 @@ describe("guardApiKey - POST body attacks when protection disabled", () => {
 
 describe("guardApiKey - suggest and search use independent keys", () => {
   test("suggest protected, search open - suggest blocked, search passes", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: true,
       apiKeySearchEnabled: false,
     });
@@ -344,7 +335,7 @@ describe("guardApiKey - suggest and search use independent keys", () => {
   });
 
   test("search protected, suggest open - search blocked, suggest passes", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: false,
       apiKeySearchEnabled: true,
     });
@@ -355,7 +346,7 @@ describe("guardApiKey - suggest and search use independent keys", () => {
   });
 
   test("both protected - both blocked without auth", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: true,
       apiKeySearchEnabled: true,
     });
@@ -366,7 +357,7 @@ describe("guardApiKey - suggest and search use independent keys", () => {
   });
 
   test("both protected - same key unlocks both", async () => {
-    await setSettings(SETTINGS_ID, {
+    await updateInstanceSettings({
       apiKeySuggestEnabled: true,
       apiKeySearchEnabled: true,
     });

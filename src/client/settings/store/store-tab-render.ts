@@ -4,14 +4,16 @@ import type { RepoInfo, StoreItem } from "../../types/store-tab";
 import { getBase } from "../../utils/base-url";
 import { renderMdInline } from "../../utils/md";
 
+const t = window.scopedT("core");
+
 const OFFICIAL_REPO_URL =
   "https://github.com/degoog-org/official-extensions.git";
 
 export function normalizeRepoUrl(url: string): string {
-  const t = (url || "").trim();
-  return t.endsWith(".git")
-    ? t
-    : t + (t.includes("?") || t.includes("#") ? "" : ".git");
+  const normUrl = (url || "").trim();
+  return normUrl.endsWith(".git")
+    ? normUrl
+    : normUrl + (normUrl.includes("?") || normUrl.includes("#") ? "" : ".git");
 }
 
 export function formatRelativeTime(iso: string): string {
@@ -39,21 +41,16 @@ export function repoImageSrc(
   return `${getBase()}/api/store/repos/${encodeURIComponent(repo.localPath)}/asset?path=${encodeURIComponent(img)}${q}`;
 }
 
-export function pluginTypeLabel(t: string): string {
-  if (t === "command") return "Bang";
-  if (t === "slot") return "Slot";
-  if (t === "search-result-tab") return "Search tab";
-  if (t === "searchBarAction") return "Search bar";
-  return t.charAt(0).toUpperCase() + t.slice(1).replace(/-/g, " ");
+export function pluginTypeLabel(type: string): string {
+  if (type === "command") return "Bang";
+  if (type === "slot") return "Slot";
+  if (type === "search-result-tab") return "Search tab";
+  if (type === "searchBarAction") return "Search bar";
+  return type.charAt(0).toUpperCase() + type.slice(1).replace(/-/g, " ");
 }
 
-export function engineTypeLabel(t: string): string {
-  if (t === "web") return "Web";
-  if (t === "images") return "Images";
-  if (t === "videos") return "Videos";
-  if (t === "news") return "News";
-
-  return t.charAt(0).toUpperCase() + t.slice(1);
+export function engineTypeLabel(type: string): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 export function renderRepoDetail(
@@ -141,12 +138,12 @@ export function renderItemCard(
   const token = getToken();
   const firstUrl = item.screenshots.length
     ? screenshotUrl(
-        item.repoSlug,
-        item.type,
-        itemSlug,
-        item.screenshots[0],
-        token,
-      )
+      item.repoSlug,
+      item.type,
+      itemSlug,
+      item.screenshots[0],
+      token,
+    )
     : "";
   const thumb = item.screenshots.length
     ? `<img src="${firstUrl}" alt="" class="store-card-thumb" loading="lazy">`
@@ -196,12 +193,18 @@ export function renderItemCard(
           <div class="store-card-name">${escapeHtml(item.name)}</div>
           <div class="store-card-meta">by ${author || "-"} · ${escapeHtml(item.repoName)}</div>
           <div class="store-card-desc">${renderMdInline(item.description || "")}</div>
-          <div class="store-card-version">${item.updateAvailable ? `<span class="store-card-version-old">v${escapeHtml(item.installedVersion || "?")}</span> → ` : ""}v${escapeHtml(item.version)}</div>
-          ${item.requiresNewerVersion ? `<div class="store-card-version-warning">Requires a newer version of Degoog</div>` : ""}
+          ${item.requiresNewerVersion ? `<div class="store-card-version-warning">${escapeHtml(t("settings-page.extensions.requires-newer-version"))}</div>` : ""}
         </div>
         <div class="store-card-footer">
-          <span class="store-type-badge store-type-${item.type} degoog-badge degoog-badge--store-type">${typeLabel}</span>
-          ${subLabel ? `<span class="store-subtype-badge degoog-badge">${escapeHtml(subLabel)}</span>` : ""}
+          <div class="store-card-footer-main">
+            <div class="store-card-version">${item.updateAvailable ? `<span class="store-card-version-old">v${escapeHtml(item.installedVersion || "?")}</span> → ` : ""}v${escapeHtml(item.version)}</div>
+
+            <div class="store-card-footer-meta">
+              <span class="store-type-badge store-type-${item.type} degoog-badge degoog-badge--store-type">${typeLabel}</span>
+              ${subLabel ? `<span class="store-subtype-badge degoog-badge">${escapeHtml(subLabel)}</span>` : ""}
+            </div>
+          </div>
+
           <div class="store-card-actions">${btn}</div>
         </div>
       </div>
@@ -214,6 +217,7 @@ export function filterItems(
   subtypeFilter: string,
   searchQuery: string,
   repoFilter: string | null,
+  installedFilter: string,
 ): StoreItem[] {
   let out = items;
   if (repoFilter) {
@@ -226,9 +230,17 @@ export function filterItems(
   if (subtypeFilter && subtypeFilter !== "all") {
     out = out.filter((i) => {
       if (i.type === "plugin") return i.pluginType === subtypeFilter;
-      if (i.type === "engine") return i.engineType === subtypeFilter;
+      if (i.type === "engine") {
+        const types = i.engineTypes ?? (i.engineType ? [i.engineType] : []);
+        return types.includes(subtypeFilter);
+      }
       return true;
     });
+  }
+  if (installedFilter === "installed") {
+    out = out.filter((i) => i.installed);
+  } else if (installedFilter === "not-installed") {
+    out = out.filter((i) => !i.installed);
   }
   if (searchQuery && searchQuery.trim()) {
     const q = searchQuery.trim().toLowerCase();
@@ -257,7 +269,10 @@ export function collectSubtypes(
   if (typeFilter === "engine") {
     const set = new Set<string>();
     items.forEach((i) => {
-      if (i.type === "engine" && i.engineType) set.add(i.engineType);
+      if (i.type !== "engine") return;
+      for (const engineType of i.engineTypes ?? (i.engineType ? [i.engineType] : [])) {
+        set.add(engineType);
+      }
     });
     return Array.from(set).sort();
   }

@@ -2,16 +2,13 @@ import { Hono } from "hono";
 import {
   getEngineExtensionMeta,
   getEngineMap,
-  setEnginesLocale,
 } from "../extensions/engines/registry";
 import { canBalrogPass, gandalf } from "./settings-auth";
 import {
   getPluginExtensionMeta,
   getCommandInstanceById,
-  setCommandsLocale,
 } from "../extensions/commands/registry";
 import { getCoreTranslator } from "./pages";
-import { getLocale } from "../utils/hono";
 import {
   getSlotPlugins,
   getSlotPluginById,
@@ -20,12 +17,12 @@ import {
 import {
   getInterceptorMeta,
   getInterceptorBySettingsId,
+  getInterceptors,
 } from "../extensions/interceptors/registry";
 import { getSearchBarActionExtensionMeta } from "../extensions/search-bar/registry";
 import { getThemeExtensionMeta } from "../extensions/themes/registry";
 import {
   getSettings,
-  dumbFallbackBecauseIDontThink,
   isDisabled,
   setSettings,
   mergeSecrets,
@@ -52,6 +49,7 @@ import { outgoingFetch } from "../utils/outgoing";
 import { readFile } from "fs/promises";
 import { extensionReadmeExists } from "../utils/extension-docs";
 import { getInstalledItems, reloadAfterAction } from "../extensions/store/item-ops";
+import { makeExtID, folderFromExtID } from "../extensions/extension-id";
 import { isVersionAtLeast, getAppVersion } from "../utils/version";
 import { logger } from "../utils/logger";
 
@@ -70,9 +68,22 @@ async function getSlotExtensionMeta(
       );
       continue;
     }
+    const manifest = slot.pluginManifest;
     const baseSchema = slot.settingsSchema ?? [];
     const hasPositionChoice = (slot.slotPositions?.length ?? 0) > 0;
-    const fullSchema: SettingField[] = [...baseSchema];
+
+    const linkedInterceptorSchema = manifest
+      ? getInterceptors()
+          .filter((i) => i.pluginManifest?.id === manifest.id)
+          .flatMap((i) => i.settingsSchema ?? [])
+      : [];
+
+    const fullSchema: SettingField[] = [
+      ...(manifest?.settingsSchema ?? []),
+      ...baseSchema,
+      ...linkedInterceptorSchema,
+    ];
+
     if (hasPositionChoice) {
       fullSchema.push({
         key: SLOT_POSITION_SETTING_KEY,
@@ -87,10 +98,8 @@ async function getSlotExtensionMeta(
           : "Where the slot content appears on the page.",
       });
     }
-    const id = slot.settingsId ?? `slot-${slot.id}`;
-    const raw = slot.settingsFallbackIds?.length
-      ? await dumbFallbackBecauseIDontThink(id, slot.settingsFallbackIds)
-      : await getSettings(id);
+    const id = slot.settingsId ?? slot.id;
+    const raw = await getSettings(id);
     const settings = maskSecrets(raw, fullSchema);
     if (raw["disabled"]) settings["disabled"] = raw["disabled"];
     if (hasPositionChoice) {
@@ -105,8 +114,8 @@ async function getSlotExtensionMeta(
     }
     out.push({
       id,
-      displayName: slot.name,
-      description: slot.description,
+      displayName: manifest?.name ?? slot.name,
+      description: manifest?.description ?? slot.description,
       type: ExtensionStoreType.Plugin,
       configurable: fullSchema.length > 0,
       settingsSchema: fullSchema,
@@ -119,13 +128,7 @@ async function getSlotExtensionMeta(
 }
 
 router.get("/api/extensions", async (c) => {
-  const locale = getLocale(c);
   const coreT = await getCoreTranslator();
-  if (locale) {
-    setCommandsLocale(locale);
-    setEnginesLocale(locale);
-    coreT.setLocale(locale);
-  }
   const [
     engines,
     plugins,
@@ -160,17 +163,22 @@ router.get("/api/extensions", async (c) => {
   ];
   for (const meta of allMetas) {
     const inst = installedItems.find((i) => {
-      const prefixes =
+      const expected =
         i.type === ExtensionStoreType.Plugin
-          ? ["plugin-", "slot-", "interceptor-"]
+          ? [
+              makeExtID(i.installedAs, "command"),
+              makeExtID(i.installedAs, "slot"),
+              makeExtID(i.installedAs, "middleware"),
+              makeExtID(i.installedAs, "tab"),
+            ]
           : i.type === ExtensionStoreType.Theme
-            ? ["theme-"]
+            ? [makeExtID(i.installedAs, "theme")]
             : i.type === ExtensionStoreType.Engine
-              ? ["engine-"]
+              ? [makeExtID(i.installedAs, "engine")]
               : i.type === ExtensionStoreType.Autocomplete
-                ? ["autocomplete-"]
-                : ["transport-"];
-      return prefixes.some((p) => meta.id === p + i.installedAs);
+                ? [makeExtID(i.installedAs, "autocomplete")]
+                : [makeExtID(i.installedAs, "transport")];
+      return expected.includes(meta.id);
     });
     if (inst?.minDegoogVersion) {
       meta.requiresNewerVersion = !isVersionAtLeast(
@@ -205,13 +213,7 @@ router.post("/api/extensions/:id/settings", async (c) => {
     return c.json({ error: "Invalid JSON" }, 400);
   }
 
-  const locale = getLocale(c);
   const coreT = await getCoreTranslator();
-  if (locale) {
-    setCommandsLocale(locale);
-    setEnginesLocale(locale);
-    coreT.setLocale(locale);
-  }
   const [
     engines,
     plugins,
@@ -286,10 +288,10 @@ router.post("/api/extensions/:id/settings", async (c) => {
   }
 
   if (
-    id.startsWith("plugin-") &&
+    id.endsWith("-command") &&
     ext.settingsSchema.some((f) => f.key === "useAsSettingsGate")
   ) {
-    const slug = id.slice(7);
+    const slug = folderFromExtID(id, "command");
     const gateValue = `plugin:${slug}`;
     const mid = await getSettings("middleware");
     const useGate = mid.settingsGate;
@@ -307,9 +309,7 @@ router.post("/api/extensions/:id/settings", async (c) => {
   const commandInstance = getCommandInstanceById(id);
   if (commandInstance?.configure) commandInstance.configure(merged);
 
-  const slotMatch = id.startsWith("slot-")
-    ? id.slice(5)
-    : getSlotPlugins().find((s) => (s.settingsId ?? `slot-${s.id}`) === id)?.id;
+  const slotMatch = getSlotPlugins().find((s) => s.settingsId === id)?.id;
   if (slotMatch) {
     const slotPlugin = getSlotPluginById(slotMatch);
     if (slotPlugin?.configure) slotPlugin.configure(merged);
@@ -328,13 +328,12 @@ router.post("/api/extensions/:id/settings", async (c) => {
     }
   }
 
-  if (id.startsWith("transport-")) {
-    const transportName = id.slice(10);
-    const transportInstance = getTransport(transportName);
+  if (id.endsWith("-transport")) {
+    const transportInstance = getTransport(id);
     if (transportInstance?.configure) transportInstance.configure(merged);
   }
 
-  if (id.startsWith("autocomplete-")) {
+  if (id.endsWith("-autocomplete")) {
     const providerInstance = getAutocompleteProviderById(id);
     if (providerInstance?.configure) providerInstance.configure(merged);
   }

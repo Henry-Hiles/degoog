@@ -1,52 +1,43 @@
-import {
-  skeletonGlance,
-  skeletonImageGrid,
-  skeletonResults,
-  skeletonSidebar,
-} from "../../animations/skeleton";
-import { BUILTIN_SEARCH_TYPES, MAX_PAGE } from "../../constants";
+import { MAX_PAGE } from "../../constants";
 import {
   closeMediaPreview,
   destroyMediaObserver,
 } from "../../modules/media/media";
-import {
-  clearSlotPanels,
-  renderResults,
-  renderSidebar,
-} from "../../modules/renderer/render";
+import { clearSlotPanels, renderResults } from "../../modules/renderer/render";
 import { renderMediaEngineBar } from "../../modules/renderer/render-media";
 import { state } from "../../state";
 import {
-  SlotPanelPosition,
   type Command,
   type ScoredResult,
   type SearchResponse,
 } from "../../types";
 import { abortAcReq, hideAcDropdown } from "../autocomplete";
 import { triggerUovadipasqua } from "../uovadipasqua";
-import { getEngines } from "../engines";
-import { setActiveTab, setTabsForBang, showAllTabs } from "../navigation";
+import {
+  getEngines,
+  getKnownSearchTypePrefixes,
+  isBuiltinSearchType,
+} from "../engines";
+import { setActiveTab, setTabsForBang } from "../navigation";
 import { buildPaginationHtml } from "../pagination";
 import {
   getNaturalLanguageBangQuery,
   runScriptsInContainer,
-  setResultsMeta,
 } from "../search-helpers";
-import {
-  abortGlancePanels,
-  abortSlotPanels,
-  buildCommandGlanceHtml,
-  fetchGlancePanels,
-  fetchSlotPanels,
-} from "../search-utils";
+import { buildCommandGlanceHtml } from "../search-utils";
 import {
   abortStreamingSearch,
   performStreamingSearch,
 } from "../streaming-search";
-import { buildSearchBody, buildSearchUrl, imgFilterRecord } from "../url";
+import { buildSearchBody, buildSearchUrl } from "../url";
 import { searchAuthHeaders, appendSearchAuthParams } from "../request";
 import { getBase } from "../base-url";
 import { fetchStreamingConfig } from "../streaming-config";
+import {
+  prepareResultsUi,
+  pushSearchHistory,
+  renderSearchResponse,
+} from "./search-actions-render";
 
 let commandsCache: Command[] | null = null;
 
@@ -85,22 +76,16 @@ export async function performSearch(
   const isInit = state.isInitialLoad;
   state.isInitialLoad = false;
 
-  if (resolvedType.startsWith("tab:")) {
-    const { performTabSearch } = await import("../../modules/tabs/tab-search");
-    return performTabSearch(query, resolvedType.slice(4), page);
-  }
-
   const prefixMatch = query.trim().match(/^(\w+):(.+)$/);
   if (prefixMatch && !query.trim().startsWith("http")) {
     const prefix = prefixMatch[1].toLowerCase();
     const actualQuery = prefixMatch[2].trim();
     if (actualQuery) {
-      if (prefix !== "web" && BUILTIN_SEARCH_TYPES.has(prefix)) {
-        return performSearch(actualQuery, prefix, page);
-      }
-      const { getPluginTabIds } = await import("../../modules/tabs/tabs");
-      const knownTypes = await getPluginTabIds();
+      const knownTypes = await getKnownSearchTypePrefixes();
       if (knownTypes.has(prefix)) {
+        if (isBuiltinSearchType(prefix)) {
+          return performSearch(actualQuery, prefix, page);
+        }
         const { performTabSearch } =
           await import("../../modules/tabs/tab-search");
         return performTabSearch(actualQuery, `engine:${prefix}`, page);
@@ -108,7 +93,12 @@ export async function performSearch(
     }
   }
 
-  if (query.trim().startsWith("!")) {
+  if (resolvedType.startsWith("tab:")) {
+    const { performTabSearch } = await import("../../modules/tabs/tab-search");
+    return performTabSearch(query, resolvedType.slice(4), page);
+  }
+
+  if (query.trim().startsWith("!") || /\s!\S+$/.test(query.trim())) {
     state.currentQuery = query;
     return _performBangCommand(query, resolvedType, page || 1, isInit);
   }
@@ -147,87 +137,15 @@ export async function performSearch(
   const engines = await getEngines();
   const url = buildSearchUrl(query, engines, resolvedType, resolvedPage);
 
-  state.currentBangQuery = "";
-  showAllTabs();
-  setActiveTab(resolvedType);
-  closeMediaPreview();
-  abortAcReq();
-  hideAcDropdown(document.getElementById("ac-dropdown-home"));
-  hideAcDropdown(document.getElementById("ac-dropdown-results"));
-  (document.activeElement as HTMLElement | null)?.blur();
-
-  const resultsInput = document.getElementById(
-    "results-search-input",
-  ) as HTMLInputElement | null;
-  if (resultsInput) {
-    resultsInput.value = query;
-    resultsInput.defaultValue = query;
-  }
-  const layout = document.getElementById("results-layout");
-  if (resolvedType === "images") {
-    layout?.classList.add("media-mode");
-  } else {
-    layout?.classList.remove("media-mode");
-  }
-  const resultsMeta = document.getElementById("results-meta");
-  if (resultsMeta) resultsMeta.textContent = "Searching...";
-  clearSlotPanels();
-  if (resolvedType === "images") {
-    abortGlancePanels();
-    abortSlotPanels();
-  }
-  const glanceEl = document.getElementById("at-a-glance");
-  if (glanceEl)
-    glanceEl.innerHTML = resolvedType === "web" ? skeletonGlance() : "";
-  const resultsList = document.getElementById("results-list");
-  if (resultsList) {
-    if (resolvedType === "images") {
-      resultsList.innerHTML = skeletonImageGrid();
-    } else {
-      resultsList.innerHTML = skeletonResults();
-    }
-  }
-  const pagination = document.getElementById("pagination");
-  if (pagination) pagination.innerHTML = "";
-  const sidebar = document.getElementById("results-sidebar");
-  const isMediaType = resolvedType === "images";
-  if (sidebar) sidebar.innerHTML = isMediaType ? "" : skeletonSidebar();
-  document.title = `${query} - degoog`;
-
-  const historyState = {
-    degoog: true,
-    query,
-    type: resolvedType,
-    page: resolvedPage,
-    imageFilter:
-      resolvedType === "images" ? { ...state.imageFilter } : undefined,
-  };
-  if (state.postMethodEnabled) {
-    if (isInit) {
-      history.replaceState(historyState, "", `${getBase()}/search`);
-    } else {
-      history.pushState(historyState, "", `${getBase()}/search`);
-    }
-  } else {
-    const urlParams = new URLSearchParams({ q: query });
-    if (resolvedType !== "web") urlParams.set("type", resolvedType);
-    if (resolvedPage > 1) urlParams.set("page", String(resolvedPage));
-    if (resolvedType === "images") {
-      for (const [k, v] of Object.entries(imgFilterRecord(state.imageFilter))) {
-        urlParams.set(k, v);
-      }
-    }
-    const getUrl = `${getBase()}/search?${urlParams.toString()}`;
-    if (isInit) {
-      history.replaceState(historyState, "", getUrl);
-    } else {
-      history.pushState(historyState, "", getUrl);
-    }
-  }
+  prepareResultsUi(query, resolvedType);
+  pushSearchHistory(query, resolvedType, resolvedPage, isInit);
 
   if (naturalBangQuery) {
     return _performSearchWithBang(naturalBangQuery, url, query, resolvedType);
   }
+
+  const resultsMeta = document.getElementById("results-meta");
+  const resultsList = document.getElementById("results-list");
 
   try {
     const res = state.postMethodEnabled
@@ -256,33 +174,9 @@ export async function performSearch(
       return;
     }
     const data = (await res.json()) as SearchResponse;
-    state.currentResults = data.results;
-    state.currentData = data;
-
-    const metaText = `About ${data.results.length} results (${(data.totalTime / 1000).toFixed(2)} seconds)`;
-    setResultsMeta(metaText);
-
-    if (isMediaType) {
-      if (glanceEl) glanceEl.innerHTML = "";
-      renderMediaEngineBar(data.engineTimings ?? []);
-      if (sidebar) sidebar.innerHTML = "";
-    } else if (resolvedType === "web") {
-      void fetchGlancePanels(query, data.results);
-      void fetchSlotPanels(query, data.results).then((panels) => {
-        const kpPanels = panels.filter(
-          (p) => p.position === SlotPanelPosition.KnowledgePanel,
-        );
-        renderSidebar(
-          data,
-          (q) => void performSearch(q),
-          kpPanels.length > 0 ? { sidebarTopPanels: kpPanels } : undefined,
-        );
-      });
-    } else {
-      renderSidebar(data, (q) => void performSearch(q));
-      if (glanceEl) glanceEl.innerHTML = "";
-    }
-    renderResults(data.results);
+    renderSearchResponse(data, query, resolvedType, (q) => void performSearch(q), {
+      fetchGlance: true,
+    });
   } catch (err) {
     console.error("[search] search failed", err);
     if (resultsMeta) resultsMeta.textContent = "";
@@ -301,38 +195,16 @@ async function _performSearchWithBang(
   const glanceEl = document.getElementById("at-a-glance");
   const resultsMeta = document.getElementById("results-meta");
   const resultsList = document.getElementById("results-list");
-  const sidebar = document.getElementById("results-sidebar");
   try {
     const [cmdRes, searchRes] = await Promise.all([
       fetch(`${getBase()}/api/command?q=${encodeURIComponent(bangQuery)}`),
       fetch(searchUrl),
     ]);
     const searchData = (await searchRes.json()) as SearchResponse;
-    state.currentResults = searchData.results;
-    state.currentData = searchData;
-    const metaText = `About ${searchData.results.length} results (${(searchData.totalTime / 1000).toFixed(2)} seconds)`;
-    setResultsMeta(metaText);
     const isMediaType = type === "images";
-    if (isMediaType) {
-      if (glanceEl) glanceEl.innerHTML = "";
-      renderMediaEngineBar(searchData.engineTimings ?? []);
-      if (sidebar) sidebar.innerHTML = "";
-    } else if (type === "web") {
-      void fetchSlotPanels(query, searchData.results).then((panels) => {
-        const kpPanels = panels.filter(
-          (p) => p.position === SlotPanelPosition.KnowledgePanel,
-        );
-        renderSidebar(
-          searchData,
-          (q) => void performSearch(q),
-          kpPanels.length > 0 ? { sidebarTopPanels: kpPanels } : undefined,
-        );
-      });
-    } else {
-      renderSidebar(searchData, (q) => void performSearch(q));
-      if (glanceEl) glanceEl.innerHTML = "";
-    }
-    renderResults(searchData.results);
+    renderSearchResponse(searchData, query, type, (q) => void performSearch(q), {
+      fetchGlance: false,
+    });
 
     if (glanceEl && cmdRes.ok && !isMediaType) {
       const cmdData = (await cmdRes.json()) as {
@@ -429,7 +301,7 @@ async function _performBangCommand(
     if (!res.ok) throw new Error("not found");
     const data = (await res.json()) as {
       type: string;
-      searchType?: string;
+      primaryType?: string;
       results?: ScoredResult[];
       engineTimings?: { name: string; time: number; resultCount: number }[];
       totalTime?: number;
@@ -439,7 +311,7 @@ async function _performBangCommand(
       page?: number;
     };
     if (data.type === "engine") {
-      const engineType = data.searchType ?? "web";
+      const engineType = data.primaryType ?? "web";
       const isMedia = engineType === "images";
       state.currentResults = data.results ?? [];
       state.currentData = data as unknown as SearchResponse;

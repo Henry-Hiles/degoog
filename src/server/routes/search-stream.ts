@@ -1,14 +1,10 @@
 import { Hono } from "hono";
 import {
-  getActiveWebEngines,
-  getEnginesForCustomType,
-  getEnginesForSearchType,
-} from "../extensions/engines/registry";
-import {
   fetchRelatedSearches,
   scoreResults,
   searchSingleEngine,
 } from "../search";
+import { selectActiveEngines } from "../search/engine-selection";
 import {
   EngineTiming,
   SearchResponse,
@@ -17,11 +13,11 @@ import {
   TimeFilter,
 } from "../types";
 import * as cache from "../utils/cache";
-import { asBoolean, asString, getSettings } from "../utils/plugin-settings";
+import { logger } from "../utils/logger";
+import { asBoolean, asString } from "../utils/plugin-settings";
 import {
   _applyRateLimit,
   cacheKey,
-  DEGOOG_SETTINGS_ID,
   isValidQuery,
   parseEngineConfig,
 } from "../utils/search";
@@ -30,6 +26,7 @@ import { applyDomainRules } from "./search/_domain-rules";
 import { signResultThumbnails } from "../utils/proxy-sign";
 import { parseImageFilter, parsePage } from "./search/_parsers";
 import { runIntercepts } from "../utils/run-interceptors";
+import { getInstanceSettings } from "../utils/server-settings";
 
 const router = new Hono();
 
@@ -59,23 +56,34 @@ router.get("/api/search/stream", async (c) => {
     c.req.query("imgNsfw"),
   );
 
-  const { query } = await runIntercepts(origQ, lang);
+  const { query, overrides } = await runIntercepts(origQ, lang);
+  const type = (overrides.searchType ?? searchType) as SearchType;
+  const resolvedLang = overrides.lang ?? lang;
+  const resolvedTime = (overrides.timeFilter ?? timeFilter) as TimeFilter;
 
   const key = cacheKey(
     query,
     engines,
-    searchType,
+    type,
     page,
-    timeFilter,
-    lang,
+    resolvedTime,
+    resolvedLang,
     dateFrom,
     dateTo,
     imageFilter,
   );
 
-  const cached = cache.get(key);
+  const cached = await cache.get(key);
   if (cached) {
-    const liveResults = signResultThumbnails(await applyDomainRules(cached.results));
+    const qShort = query.trim().slice(0, 80);
+    const enginesOn = Object.values(engines).filter(Boolean).length;
+    logger.debug(
+      "search-stream",
+      `cache hit q="${qShort}" type=${type} page=${page} enginesOn=${enginesOn} results=${cached.results.length} timings=${cached.engineTimings.length}`,
+    );
+    const liveResults = signResultThumbnails(
+      await applyDomainRules(cached.results),
+    );
     const encoder = new TextEncoder();
     const body = new ReadableStream({
       start(controller) {
@@ -114,35 +122,21 @@ router.get("/api/search/stream", async (c) => {
     });
   }
 
-  const settings = await getSettings(DEGOOG_SETTINGS_ID);
+  const settings = await getInstanceSettings();
   const autoRetry = asBoolean(settings.streamingAutoRetry);
   const maxRetries = Math.min(
     5,
     Math.max(1, parseInt(asString(settings.streamingMaxRetries) || "2", 10)),
   );
 
-  const builtinTypes = new Set(["web", "images", "videos", "news"]);
-  const rawActiveEngines =
-    searchType === "web"
-      ? await getActiveWebEngines(engines)
-      : builtinTypes.has(searchType)
-        ? (await getEnginesForSearchType(searchType, engines)).map((e) => ({
-            id: e.id,
-            instance: e.instance,
-            score: 1,
-          }))
-        : (await getEnginesForCustomType(searchType)).map((e) => ({
-            id: e.id,
-            instance: e.instance,
-            score: 1,
-          }));
+  const rawActiveEngines = await selectActiveEngines(type, engines);
 
   if (rawActiveEngines.length === 0) {
     return c.json({
       results: [],
       query,
       totalTime: 0,
-      type: searchType,
+      type,
       engineTimings: [],
       relatedSearches: [],
     });
@@ -151,6 +145,7 @@ router.get("/api/search/stream", async (c) => {
   const start = performance.now();
 
   let closed = false;
+  const cancelController = new AbortController();
 
   const stream = new ReadableStream({
     start(controller) {
@@ -174,7 +169,6 @@ router.get("/api/search/stream", async (c) => {
         }
       }
 
-
       const enginePromises = rawActiveEngines.map(
         async ({ instance, score, id }) => {
           const engineName = instance.name;
@@ -191,11 +185,12 @@ router.get("/api/search/stream", async (c) => {
               id,
               query,
               page,
-              timeFilter,
-              lang,
+              resolvedTime,
+              resolvedLang,
               dateFrom,
               dateTo,
               imageFilter,
+              cancelController.signal,
             );
             lastTiming = timing;
 
@@ -205,7 +200,9 @@ router.get("/api/search/stream", async (c) => {
               _send("engine-result", {
                 engine: engineName,
                 timing,
-                results: signResultThumbnails(await applyDomainRules(scoreResults(allRawResults))),
+                results: signResultThumbnails(
+                  await applyDomainRules(scoreResults(allRawResults)),
+                ),
                 retry: isRetry,
                 attempt,
               });
@@ -238,7 +235,7 @@ router.get("/api/search/stream", async (c) => {
         const totalTime = Math.round(performance.now() - start);
         const rawScoredResults = scoreResults(allRawResults);
         let relatedSearches: string[] = [];
-        if (searchType === "web" && page === 1) {
+        if (type === "web" && page === 1) {
           relatedSearches = await fetchRelatedSearches(query).catch(
             () => [] as string[],
           );
@@ -248,17 +245,15 @@ router.get("/api/search/stream", async (c) => {
           results: rawScoredResults,
           query,
           totalTime,
-          type: searchType,
+          type,
           engineTimings: allTimings,
           relatedSearches,
         };
 
         const ttl = cache.hasFailedEngines(response)
           ? cache.SHORT_TTL_MS
-          : searchType === "news"
-            ? cache.NEWS_TTL_MS
-            : undefined;
-        cache.set(key, response, ttl);
+          : undefined;
+        await cache.set(key, response, ttl);
 
         _send("done", {
           totalTime,
@@ -273,6 +268,7 @@ router.get("/api/search/stream", async (c) => {
     },
     cancel() {
       closed = true;
+      cancelController.abort();
     },
   });
 

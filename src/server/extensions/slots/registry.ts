@@ -11,10 +11,10 @@ import {
   lockinNameSpace,
   lockinSettingsId,
 } from "../../utils/plugin-assets";
-import { getSettings, isDisabledWithFallback } from "../../utils/plugin-settings";
-import { createTranslatorFromPath } from "../../utils/translation";
+import { getSettings, isDisabled } from "../../utils/plugin-settings";
+import { bootCircuitFromPath } from "../../utils/translation-circuit";
 import { createRegistry } from "../registry-factory";
-import { stupidSettingIDtoAvoidConflicts } from "../extension-id";
+import { isPluginManifest } from "../plugin-manifest";
 
 const builtinsDir = join(
   process.cwd(),
@@ -52,59 +52,38 @@ function isSlotPlugin(val: unknown): val is SlotPlugin {
 const slotSourceMap = new Map<string, "builtin" | "plugin">();
 
 const registry = createRegistry<SlotPlugin>({
-  dirs: () => [
-    { dir: builtinsDir, source: "builtin" },
-    { dir: pluginsDir(), source: "plugin" },
-  ],
+  dirs: () => [{ dir: builtinsDir, source: "builtin" }, { dir: pluginsDir() }],
   match: (mod) => {
     const s =
       mod.slot ??
       mod.slotPlugin ??
       (mod.default as Record<string, unknown>)?.slot;
-    return isSlotPlugin(s) ? s : null;
+    if (!isSlotPlugin(s)) return null;
+    if (isPluginManifest(mod.plugin)) s.pluginManifest = mod.plugin;
+    return s;
   },
   canonicalIdKind: "slot",
   onLoad: async (slot, { entryPath, folderName, source, canonicalId }) => {
-    const legacyId = typeof slot.id === "string" ? slot.id : "";
-    const id = canonicalId ?? folderName;
+    const id = slot.pluginManifest?.id ?? canonicalId ?? folderName;
     slot.id = id;
-
-    const { settingsId, fallbackSettingsIds } = stupidSettingIDtoAvoidConflicts(
-      {
-        kind: "slot",
-        canonicalId: id,
-        folderName,
-        legacyDevId: legacyId,
-        explicitSettingsId: slot.settingsId,
-      },
-    );
-
-    slot.settingsId = settingsId;
-    slot.settingsFallbackIds = fallbackSettingsIds;
-    const rawSettings = await getSettings(settingsId);
+    slot.settingsId = id;
+    const rawSettings = await getSettings(id);
     const p = parseInt(String(rawSettings["priority"] ?? "0"), 10);
     slot.priority = isNaN(p) ? 0 : p;
     slotSourceMap.set(id, source);
-    slot.t = await createTranslatorFromPath(entryPath);
+    slot.t = await bootCircuitFromPath(entryPath);
 
     lockinNameSpace(folderName, `slots/${id}`);
-    lockinSettingsId(folderName, settingsId);
+    lockinSettingsId(folderName, id);
 
-    if (!(await isDisabledWithFallback(settingsId, fallbackSettingsIds))) {
+    if (!(await isDisabled(id))) {
       const template = await loadPluginAssets(
         entryPath,
         folderName,
-        settingsId,
+        id,
         source,
       );
-
-      await initPlugin(
-        slot,
-        entryPath,
-        settingsId,
-        template,
-        fallbackSettingsIds,
-      );
+      await initPlugin(slot, entryPath, id, template, { pluginId: folderName });
     }
   },
   debugTag: "slots",

@@ -30,6 +30,10 @@ export async function performTabSearch(
 ): Promise<void> {
   if (!query.trim()) return;
 
+  void import("../filters/image-filters").then(({ syncImgFilters }) =>
+    syncImgFilters(`tab:${tabId}`),
+  );
+
   const isInit = state.isInitialLoad;
   state.isInitialLoad = false;
 

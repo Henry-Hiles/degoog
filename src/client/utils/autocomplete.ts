@@ -17,8 +17,14 @@ function _updateAcHighlight(items: NodeListOf<HTMLElement>): void {
 }
 
 export const abortAcReq = (): void => {
-  if (acTimeout) { clearTimeout(acTimeout); acTimeout = null; }
-  if (acController) { acController.abort(); acController = null; }
+  if (acTimeout) {
+    clearTimeout(acTimeout);
+    acTimeout = null;
+  }
+  if (acController) {
+    acController.abort();
+    acController = null;
+  }
 };
 
 export function hideAcDropdown(dropdown: HTMLElement | null): void {
@@ -41,18 +47,18 @@ async function _fetchSuggestions(
   try {
     const res = state.postMethodEnabled
       ? await fetch(`${getBase()}/api/suggest`, {
-        method: "POST",
-        body: JSON.stringify({ query }),
-        headers: {
-          "Content-Type": "application/json",
-          ...searchAuthHeaders(),
-        },
-        signal: acController.signal,
-      })
+          method: "POST",
+          body: JSON.stringify({ query }),
+          headers: {
+            "Content-Type": "application/json",
+            ...searchAuthHeaders(),
+          },
+          signal: acController.signal,
+        })
       : await fetch(`${getBase()}/api/suggest?q=${encodeURIComponent(query)}`, {
-        headers: searchAuthHeaders(),
-        signal: acController.signal,
-      });
+          headers: searchAuthHeaders(),
+          signal: acController.signal,
+        });
 
     const raw = (await res.json()) as {
       text: string;
@@ -80,9 +86,9 @@ async function _fetchSuggestions(
           const desc = s.rich.description
             ? `<span class="degoog-ac-rich-desc">${escapeHtml(s.rich.description)}</span>`
             : "";
-          return `<div class="ac-item degoog-ac-rich" data-text="${escapeHtml(s.text)}">${thumb}<div class="degoog-ac-rich-body"><div class="degoog-ac-rich-title">${escapeHtml(s.text)}${type}</div>${desc}</div><span class="degoog-ac-source">${escapeHtml(s.source)}</span></div>`;
+          return `<div class="ac-item degoog-ac-rich" data-text="${escapeHtml(s.text)}">${thumb}<div class="degoog-ac-rich-body"><div class="degoog-ac-rich-title">${escapeHtml(s.text)}${type}</div>${desc}</div><span class="degoog-ac-source">${escapeHtml(s.source?.replace(/Autocomplete/gi, "")?.trim())}</span></div>`;
         }
-        return `<div class="ac-item" data-text="${escapeHtml(s.text)}"><span class="degoog-ac-text">${escapeHtml(s.text)}</span><span class="degoog-ac-source">${escapeHtml(s.source)}</span></div>`;
+        return `<div class="ac-item" data-text="${escapeHtml(s.text)}"><span class="degoog-ac-text">${escapeHtml(s.text)}</span><span class="degoog-ac-source">${escapeHtml(s.source?.replace(/Autocomplete/gi, "")?.trim())}</span></div>`;
       })
       .join("");
     dropdown.style.display = "block";
@@ -101,7 +107,7 @@ async function _fetchSuggestions(
         performSearch(text);
       });
     });
-  } catch { }
+  } catch {}
 }
 
 export function initAutocomplete(

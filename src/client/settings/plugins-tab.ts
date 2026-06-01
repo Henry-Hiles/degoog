@@ -36,7 +36,7 @@ const _renderPluginCard = (
     ? `<span class="ext-card-desc">${renderMdInline(plugin.description)}</span>`
     : "";
   const versionWarning = plugin.requiresNewerVersion
-    ? `<span class="ext-version-warning">Requires a newer version of Degoog</span>`
+    ? `<span class="ext-version-warning">${escapeHtml(t("settings-page.extensions.requires-newer-version"))}</span>`
     : "";
   const status = plugin.configurable ? getConfigStatus(plugin) : null;
   const badge =
@@ -50,8 +50,8 @@ const _renderPluginCard = (
     : "";
   const canDisable =
     plugin.configurable ||
-    plugin.id.startsWith("plugin-") ||
-    plugin.id.startsWith("slot-");
+    plugin.id.endsWith("-slot") ||
+    (plugin.id.endsWith("-command") && plugin.source !== "builtin");
   const toggle = canDisable
     ? `<label class="engine-toggle degoog-toggle-wrap degoog-toggle-wrap--transparent">
         <input type="checkbox" class="plugin-toggle-input" id="plugin-toggle-${escapeHtml(plugin.id)}" data-id="${escapeHtml(plugin.id)}" ${isEnabled ? "checked" : ""}>

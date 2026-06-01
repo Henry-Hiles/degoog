@@ -1,5 +1,5 @@
 import { Context } from "hono";
-import { getEngineRegistry } from "../extensions/engines/registry";
+import { listEngineIds } from "../extensions/engines/registry";
 import { getSlotPlugins } from "../extensions/slots/registry";
 import {
   EngineConfig,
@@ -12,16 +12,17 @@ import {
   SlotPluginContext,
   TimeFilter,
 } from "../types";
-import { createCache } from "./cache";
+import { createCache, useCache } from "./cache";
 import { logger } from "./logger";
 import { outgoingFetch } from "./outgoing";
 import { asString, getSettings, isDisabled } from "./plugin-settings";
 import { checkRateLimit } from "./rate-limit";
 import { buildSignedProxyUrl } from "./proxy-sign";
 import { getClientIp } from "./request";
-import { injectScope, translateHTML } from "./translation";
+import { applyFilter, syncVortexSignal } from "./translation-circuit";
+import { getInstanceSettings } from "./server-settings";
+import { SLOT_PLUGIN_TIMEOUT_MS, withTimeout } from "./with-timeout";
 
-export const DEGOOG_SETTINGS_ID = "degoog-settings";
 export const DEFAULT_LANGUAGES = [
   "af",
   "am",
@@ -113,7 +114,7 @@ export const DEFAULT_LANGUAGES = [
 ];
 
 export const _applyRateLimit = async (c: Context): Promise<Response | null> => {
-  const settings = await getSettings(DEGOOG_SETTINGS_ID);
+  const settings = await getInstanceSettings();
   const opts: Record<string, string> = {};
   for (const [k, v] of Object.entries(settings)) {
     opts[k] = typeof v === "string" ? v : Array.isArray(v) ? (v[0] ?? "") : "";
@@ -130,9 +131,8 @@ export const _applyRateLimit = async (c: Context): Promise<Response | null> => {
 };
 
 export function parseEngineConfig(query: URLSearchParams): EngineConfig {
-  const registry = getEngineRegistry();
   const config: EngineConfig = {};
-  for (const { id } of registry) {
+  for (const id of listEngineIds()) {
     config[id] = query.get(id) !== "false";
   }
   return config;
@@ -151,7 +151,7 @@ export function cacheKey(
 ): string {
   const q = query.trim().toLowerCase();
   const imgKey = imageFilter
-    ? `${imageFilter.color || ""}|${imageFilter.size || ""}|${imageFilter.type || ""}|${imageFilter.layout || ""}`
+    ? `${imageFilter.color || ""}|${imageFilter.size || ""}|${imageFilter.type || ""}|${imageFilter.layout || ""}|${imageFilter.nsfw || ""}`
     : "";
   return `${q}|${JSON.stringify(engines)}|${type}|${page}|${timeFilter}|${lang}|${dateFrom}|${dateTo}|${imgKey}`;
 }
@@ -175,7 +175,8 @@ export async function runSlotPlugins(
       continue;
     }
     const slotSettingsId = plugin.settingsId ?? `slot-${plugin.id}`;
-    let effectivePosition: SlotPanelPosition = plugin.position;
+    let definedPosition: SlotPanelPosition = plugin.position;
+
     if (plugin.slotPositions?.length) {
       const raw = await getSettings(slotSettingsId);
       const chosen = asString(raw[SLOT_POSITION_SETTING_KEY]);
@@ -183,24 +184,28 @@ export async function runSlotPlugins(
         chosen &&
         plugin.slotPositions.includes(chosen as SlotPanelPosition)
       ) {
-        effectivePosition = chosen as SlotPanelPosition;
+        definedPosition = chosen as SlotPanelPosition;
       }
     }
-    if (exclude && effectivePosition === exclude) continue;
+    if (exclude && definedPosition === exclude) continue;
     try {
       if (await isDisabled(slotSettingsId)) continue;
       const ok = await Promise.resolve(plugin.trigger(query.trim()));
       if (!ok) continue;
-      if (plugin.t && locale) plugin.t.setLocale(locale);
       const context: SlotPluginContext = {
         clientIp,
         results: plugin.waitForResults ? results : undefined,
         fetch: outgoingFetch as SlotPluginContext["fetch"],
         signProxyUrl: buildSignedProxyUrl,
         createCache,
+        useCache,
       };
       const t0 = performance.now();
-      const out = await plugin.execute(query, context);
+      const out = await withTimeout(
+        Promise.resolve(plugin.execute(query, context)),
+        SLOT_PLUGIN_TIMEOUT_MS,
+        `slot ${plugin.id}`,
+      );
       logger.debug(
         "plugin",
         `${plugin.id} executed in ${Math.round(performance.now() - t0)}ms`,
@@ -209,14 +214,16 @@ export async function runSlotPlugins(
       panels.push({
         id: plugin.id,
         title: out.title,
-        html: injectScope(
-          plugin.t ? translateHTML(out.html, plugin.t) : out.html,
+        html: applyFilter(
+          plugin.t ? syncVortexSignal(out.html, plugin.t, locale) : out.html,
           `slots/${plugin.id}`,
         ),
-        position: effectivePosition,
+        position: definedPosition,
         gridSize: plugin.gridSize,
       });
-    } catch {}
+    } catch (err) {
+      logger.debug("plugin", `${plugin.id} skipped`, err);
+    }
   }
   return panels;
 }

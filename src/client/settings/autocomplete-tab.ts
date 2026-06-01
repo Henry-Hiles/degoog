@@ -5,15 +5,10 @@ import { getBase } from "../utils/base-url";
 
 const t = window.scopedT("core");
 
-const BUILTIN_IDS = new Set([
-  "autocomplete-builtin-google",
-  "autocomplete-builtin-duckduckgo",
-]);
-
 const _renderAutocompleteCard = (provider: ExtensionMeta): string => {
   const isEnabled = provider.settings["disabled"] !== "true";
   const versionWarning = provider.requiresNewerVersion
-    ? `<span class="ext-version-warning">Requires a newer version of Degoog</span>`
+    ? `<span class="ext-version-warning">${escapeHtml(t("settings-page.extensions.requires-newer-version"))}</span>`
     : "";
   const status = provider.configurable ? getConfigStatus(provider) : null;
   const badge =
@@ -50,19 +45,10 @@ export function initAutocompleteTab(allExtensions: AllExtensions): void {
 
   const providers = allExtensions.autocomplete ?? [];
 
-  const thirdParty = providers.filter((p) => !BUILTIN_IDS.has(p.id));
-  const builtin = providers.filter((p) => BUILTIN_IDS.has(p.id));
-
   let html = "";
-  if (thirdParty.length > 0) {
+  if (providers.length > 0) {
     html += `<div class="ext-group"><h3 class="ext-group-label">${escapeHtml(t("settings-page.extensions.group-autocomplete"))}</h3><div class="ext-cards">`;
-    for (const provider of thirdParty)
-      html += _renderAutocompleteCard(provider);
-    html += "</div></div>";
-  }
-  if (builtin.length > 0) {
-    html += `<div class="ext-group"><h3 class="ext-group-label">${escapeHtml(t("settings-page.extensions.group-builtin-autocomplete"))}</h3><div class="ext-cards">`;
-    for (const provider of builtin) html += _renderAutocompleteCard(provider);
+    for (const provider of providers) html += _renderAutocompleteCard(provider);
     html += "</div></div>";
   }
   container.innerHTML = html;

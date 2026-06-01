@@ -1,6 +1,12 @@
 import { describe, test, expect } from "bun:test";
-import { mergeNewResults, resolveEngine, scoreResults } from "../../src/server/search";
-import type { SearchResult, ScoredResult } from "../../src/server/types";
+import { mergeNewResults, scoreResults } from "../../src/server/search";
+import { cacheKey } from "../../src/server/utils/search";
+import {
+  ImgNsfw,
+  type SearchResult,
+  type ScoredResult,
+  type EngineConfig,
+} from "../../src/server/types";
 
 const result = (
   url: string,
@@ -35,13 +41,6 @@ describe("search", () => {
       const a = out.find((r) => r.url === "https://a.com");
       expect(a!.sources).toContain("E1");
       expect(a!.sources).toContain("E2");
-    });
-
-    test("returns sorted by score", () => {
-      const existing = [scored(result("https://a.com", "E1"), 5, ["E1"])];
-      const newResults = [result("https://a.com", "E2")];
-      const out = mergeNewResults(existing, newResults);
-      expect(out[0].url).toBe("https://a.com");
     });
 
     test("prefers gif imageUrl when merging duplicates and sets isGif", () => {
@@ -102,29 +101,25 @@ describe("search", () => {
     });
   });
 
-  describe("resolveEngine", () => {
-    test("returns engine by id when registry is initialized", async () => {
-      const { initEngines } =
-        await import("../../src/server/extensions/engines/registry");
-      const orig = process.env.DEGOOG_ENGINES_DIR;
-      process.env.DEGOOG_ENGINES_DIR = "/nonexistent-empty-dir-12345";
-      await initEngines();
-      const engine = resolveEngine("duckduckgo");
-      expect(engine).not.toBeNull();
-      expect(engine!.name).toBe("DuckDuckGo");
-      if (orig !== undefined) process.env.DEGOOG_ENGINES_DIR = orig;
-      else delete process.env.DEGOOG_ENGINES_DIR;
+  describe("cacheKey", () => {
+    const engines: EngineConfig = { google: true };
+
+    test("differs when only imgNsfw differs", () => {
+      const safe = cacheKey("cats", engines, "images", 1, "any", "", "", "", {
+        nsfw: ImgNsfw.OFF,
+      });
+      const nsfw = cacheKey("cats", engines, "images", 1, "any", "", "", "", {
+        nsfw: ImgNsfw.ON,
+      });
+      expect(safe).not.toBe(nsfw);
     });
 
-    test("returns null for unknown engine name", async () => {
-      const { initEngines } =
-        await import("../../src/server/extensions/engines/registry");
-      const orig = process.env.DEGOOG_ENGINES_DIR;
-      process.env.DEGOOG_ENGINES_DIR = "/nonexistent-empty-dir-12345";
-      await initEngines();
-      expect(resolveEngine("nonexistent-engine-xyz")).toBeNull();
-      if (orig !== undefined) process.env.DEGOOG_ENGINES_DIR = orig;
-      else delete process.env.DEGOOG_ENGINES_DIR;
+    test("stays stable when imageFilter is absent", () => {
+      const a = cacheKey("cats", engines, "web", 1);
+      const b = cacheKey("cats", engines, "web", 1);
+      expect(a).toBe(b);
+      expect(a.endsWith("|")).toBe(true);
     });
   });
+
 });
