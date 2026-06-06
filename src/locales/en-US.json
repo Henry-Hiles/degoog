@@ -296,6 +296,8 @@
       "db-size": "DB size",
       "by-type": "By engine type",
       "export-btn": "Download index (.db)",
+      "export-modal-title": "Download index",
+      "export-modal-desc": "Choose the engine type to export.",
       "manage-btn": "Manage index",
       "manage-title": "Manage indexed results",
       "manage-search-placeholder": "Search indexed results...",

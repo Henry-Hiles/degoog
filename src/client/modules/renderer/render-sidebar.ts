@@ -68,7 +68,7 @@ export function renderSidebar(
       const isIndexed = et.resultCount === 0 && et.indexed === true;
       const statusClass = et.resultCount === 0 && !isIndexed ? " engine-failed" : "";
       const metaText = isIndexed
-        ? `${t("search-templates.results.just-indexed")} · ${et.time}ms`
+        ? `${t("search-templates.result.just-indexed")} · ${et.time}ms`
         : `${et.resultCount} results · ${et.time}ms`;
       const action = isIndexed
         ? ""

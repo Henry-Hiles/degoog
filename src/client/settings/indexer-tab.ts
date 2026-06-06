@@ -794,9 +794,11 @@ const openExportModal = (stats: IndexerStats | null): void => {
   titleEl.textContent = tr("export-modal-title");
   bodyEl.innerHTML = `
     <p>${tr("export-modal-desc")}</p>
-    <select id="indexer-export-type" class="degoog-input">
-      ${types.map((type) => `<option value="${type}">${type}</option>`).join("")}
-    </select>`;
+    <div class="degoog-select-wrap">
+      <select id="indexer-export-type" class="degoog-input">
+        ${types.map((type) => `<option value="${type}">${type}</option>`).join("")}
+      </select>
+    </div>`;
   statusEl.textContent = "";
   saveEl.textContent = tr("export-btn");
   saveEl.disabled = false;

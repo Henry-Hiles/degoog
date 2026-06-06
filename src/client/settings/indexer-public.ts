@@ -2,38 +2,38 @@ import { getBase } from "../utils/base-url";
 
 const t = window.scopedT("core");
 
-interface IndexerStats {
-  totalResults: number;
-  totalQueries: number;
-  byType: Record<string, number>;
-  dbSizeBytes: number;
-}
+const tr = (key: string): string => t(`settings-page.indexer.${key}`);
 
-const tr = (key: string, vars?: Record<string, string>): string =>
-  t(`settings-page.indexer.${key}`, vars);
-
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+const fetchPublicInfo = async (): Promise<string[]> => {
+  try {
+    const res = await fetch(`${getBase()}/api/indexer/public-info`);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { available?: boolean; types?: unknown };
+    if (!data.available) return [];
+    return Array.isArray(data.types) ? (data.types as string[]) : [];
+  } catch {
+    return [];
+  }
 };
 
-const renderStats = (wrap: HTMLElement, stats: IndexerStats): void => {
-  wrap.replaceChildren();
-  const rows: Array<[string, string]> = [
-    [tr("total-results"), String(stats.totalResults)],
-    [tr("total-queries"), String(stats.totalQueries)],
-    [tr("db-size"), formatBytes(stats.dbSizeBytes)],
-  ];
-  for (const [label, value] of rows) {
-    const cell = document.createElement("div");
-    const dt = document.createElement("dt");
-    dt.textContent = label;
-    const dd = document.createElement("dd");
-    dd.textContent = value;
-    cell.append(dt, dd);
-    wrap.append(cell);
+const downloadType = async (type: string, statusEl: HTMLElement | null): Promise<void> => {
+  if (statusEl) statusEl.textContent = "";
+  try {
+    const res = await fetch(`${getBase()}/api/indexer/export?type=${encodeURIComponent(type)}`);
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (statusEl) statusEl.textContent = data.error ?? `Download failed (${res.status})`;
+      return;
+    }
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = `degoog-index-${type}.db`;
+    a.click();
+    URL.revokeObjectURL(href);
+  } catch {
+    if (statusEl) statusEl.textContent = "Download failed";
   }
 };
 
@@ -41,44 +41,34 @@ export const initIndexerPublic = async (): Promise<void> => {
   const section = document.getElementById("indexer-public-section");
   if (!section) return;
 
-  let stats: IndexerStats | null = null;
-  try {
-    const res = await fetch(`${getBase()}/api/indexer/stats`);
-    if (res.ok) stats = (await res.json()) as IndexerStats;
-  } catch {
-    stats = null;
-  }
-  if (!stats) {
+  const types = await fetchPublicInfo();
+  if (types.length === 0) {
     section.hidden = true;
     return;
   }
 
   section.hidden = false;
 
-  const statsWrap = document.getElementById("indexer-public-stats");
-  if (statsWrap) renderStats(statsWrap, stats);
+  const statusEl = document.getElementById("indexer-public-status");
+  const exportBtn = document.getElementById("indexer-public-export-btn");
+  const typeSelect = document.getElementById("indexer-public-type") as HTMLSelectElement | null;
 
-  const status = document.getElementById("indexer-public-status");
-  document
-    .getElementById("indexer-public-export-btn")
-    ?.addEventListener("click", async () => {
-      if (status) status.textContent = "";
-      try {
-        const res = await fetch(`${getBase()}/api/indexer/export`);
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { error?: string };
-          if (status) status.textContent = data.error ?? `Download failed (${res.status})`;
-          return;
-        }
-        const blob = await res.blob();
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = "degoog-index.db";
-        a.click();
-        URL.revokeObjectURL(href);
-      } catch {
-        if (status) status.textContent = `Download failed`;
-      }
-    });
+  const typeWrap = document.getElementById("indexer-public-type-wrap");
+  if (typeSelect) {
+    for (const type of types) {
+      const opt = document.createElement("option");
+      opt.value = type;
+      opt.textContent = type;
+      typeSelect.append(opt);
+    }
+    const multiType = types.length > 1;
+    typeSelect.hidden = !multiType;
+    if (typeWrap) typeWrap.hidden = !multiType;
+  }
+
+  exportBtn?.addEventListener("click", async () => {
+    const type = typeSelect?.value ?? types[0];
+    if (!type) return;
+    await downloadType(type, statusEl);
+  });
 };

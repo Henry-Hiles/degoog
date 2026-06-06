@@ -56,6 +56,16 @@ router.get("/api/indexer/stats", async (c) => {
   return c.json({ ...stats, totalResults: stats.totalHits });
 });
 
+router.get("/api/indexer/public-info", async (c) => {
+  const limitRes = await _applyRateLimit(c);
+  if (limitRes) return limitRes;
+
+  const available = await gatePublic();
+  if (!available) return c.json({ available: false });
+
+  return c.json({ available: true, types: discoverTypes() });
+});
+
 router.get("/api/indexer/types", async (c) => {
   const limitRes = await _applyRateLimit(c);
   if (limitRes) return limitRes;
