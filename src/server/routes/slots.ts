@@ -56,7 +56,9 @@ router.post("/api/slots/glance", async (c) => {
     logger.debug("slots", "invalid JSON body", err);
     return c.json({ error: "Invalid JSON" }, 400);
   }
-  if (!body.query || !body.query.trim()) return c.json({ panels: [] });
+  if (!body.query || !body.query.trim()) {
+    return c.json({ error: "Missing query or results" }, 400);
+  }
   const withResults = "results" in body;
   if (withResults && !Array.isArray(body.results)) {
     return c.json({ error: "Missing query or results" }, 400);
