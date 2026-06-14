@@ -3,7 +3,7 @@ import {
   getEnginesForCustomType,
 } from "../extensions/engines/registry";
 import type { EngineConfig, SearchEngine } from "../types";
-import { asString, getSettings } from "../utils/plugin-settings";
+import { asString, getSettings, maskSecrets } from "../utils/plugin-settings";
 
 export interface ActiveEngine {
   id: string;
@@ -41,7 +41,11 @@ export const engineSettingsFingerprint = async (
 ): Promise<string> => {
   const active = await selectActiveEngines(type, config);
   const rows = await Promise.all(
-    active.map(async ({ id }) => [id, _stableSettings(await getSettings(id))]),
+    active.map(async ({ id, instance }) => {
+      const schema = instance.settingsSchema ?? [];
+      const stored = maskSecrets(await getSettings(id), schema);
+      return [id, _stableSettings(stored)];
+    }),
   );
   return JSON.stringify(rows);
 };
