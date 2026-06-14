@@ -2,6 +2,8 @@ import { describe, test, expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { clearServerSettingsCache } from "../../src/server/utils/server-settings";
+import { clearTypeCache } from "../../src/server/extensions/engines/registry";
 
 const withTempEngineEnv = async <T>(fn: () => Promise<T>): Promise<T> => {
   const dir = mkdtempSync(join(tmpdir(), "degoog-engine-score-"));
@@ -19,6 +21,9 @@ const withTempEngineEnv = async <T>(fn: () => Promise<T>): Promise<T> => {
   process.env.DEGOOG_ENGINES_DIR = enginesDir;
   process.env.DEGOOG_PLUGIN_SETTINGS_FILE = settingsFile;
   process.env.DEGOOG_SERVER_SETTINGS_FILE = serverSettingsFile;
+
+  clearServerSettingsCache();
+  clearTypeCache();
 
   mkdirSync(enginesDir, { recursive: true });
   writeFileSync(serverSettingsFile, JSON.stringify({ degoogIndexerEnabled: false }));
@@ -48,6 +53,8 @@ const withTempEngineEnv = async <T>(fn: () => Promise<T>): Promise<T> => {
     else process.env.DEGOOG_PLUGIN_SETTINGS_FILE = prev.settingsFile;
     if (prev.serverSettingsFile === undefined) delete process.env.DEGOOG_SERVER_SETTINGS_FILE;
     else process.env.DEGOOG_SERVER_SETTINGS_FILE = prev.serverSettingsFile;
+    clearServerSettingsCache();
+    clearTypeCache();
     rmSync(dir, { recursive: true, force: true });
   }
 };
