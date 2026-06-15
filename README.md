@@ -47,6 +47,7 @@ Ready-to-use compose files live in [`docker-compose-examples/`](docker-compose-e
 | [`valkey.yml`](docker-compose-examples/valkey.yml) | degoog + Valkey | Multi-replica or public instance with shared cache keeps settings and invalidation in sync |
 | [`postgres.yml`](docker-compose-examples/postgres.yml) | degoog + Postgres | Busy public instance with a large indexer - Postgres scales concurrent writes and FTS better than SQLite |
 | [`full.yml`](docker-compose-examples/full.yml) | degoog + Valkey + Postgres | High-traffic public instance - both shared cache and scalable indexer |
+| [`mcp.yml`](docker-compose-examples/mcp.yml) | degoog + [degoog-mcp](mcp/README.md) | Exposing Degoog to LLMs / MCP clients (Claude, Cursor, llama.cpp) next to the web UI |
 
 </details>
 

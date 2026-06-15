@@ -51,6 +51,21 @@ import { logger } from "../utils/logger";
 
 const router = new Hono();
 
+type ExtensionGroupKey =
+  | "engines"
+  | "plugins"
+  | "themes"
+  | "transports"
+  | "autocomplete";
+
+const EXTENSION_TYPE_KEY: Record<ExtensionStoreType, ExtensionGroupKey> = {
+  [ExtensionStoreType.Engine]: "engines",
+  [ExtensionStoreType.Plugin]: "plugins",
+  [ExtensionStoreType.Theme]: "themes",
+  [ExtensionStoreType.Transport]: "transports",
+  [ExtensionStoreType.Autocomplete]: "autocomplete",
+};
+
 
 router.get("/api/extensions", async (c) => {
   const coreT = await getCoreTranslator();
@@ -117,13 +132,25 @@ router.get("/api/extensions", async (c) => {
   const redact = (items: ExtensionMeta[]): ExtensionMeta[] =>
     authenticated ? items : items.map((m) => ({ ...m, settings: {} }));
 
-  return c.json({
+  const full = {
     engines: redact(engines),
     plugins: redact([...plugins, ...slotMeta, ...interceptorMeta, ...searchBarMeta]),
     themes: redact(themes),
     transports: redact(transports),
     autocomplete: redact(autocomplete),
-  });
+  };
+
+  const requestedType = c.req.query("type");
+  if (requestedType) {
+    const key = EXTENSION_TYPE_KEY[requestedType as ExtensionStoreType];
+    if (!key) {
+      logger.debug("extensions", `unknown type filter '${requestedType}'`);
+      return c.json({ error: `Unknown extension type '${requestedType}'` }, 400);
+    }
+    return c.json({ [key]: full[key] });
+  }
+
+  return c.json(full);
 });
 
 router.post("/api/extensions/:id/settings", async (c) => {
