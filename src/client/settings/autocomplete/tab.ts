@@ -57,11 +57,12 @@ export function initAutocompleteTab(allExtensions: AllExtensions): void {
     .querySelectorAll<HTMLInputElement>(".autocomplete-toggle-input")
     .forEach((input) => {
       let reqToken = 0;
+      let confirmed = input.checked;
       input.addEventListener("change", async () => {
         const id = input.dataset.id;
         if (!id) return;
-        const prevChecked = !input.checked;
-        const disabled = !input.checked;
+        const intended = input.checked;
+        const disabled = !intended;
         const token = ++reqToken;
         try {
           const res = await fetch(
@@ -74,12 +75,13 @@ export function initAutocompleteTab(allExtensions: AllExtensions): void {
           );
           if (!res.ok) throw new Error("save failed");
           if (token !== reqToken) return;
+          confirmed = intended;
           window.dispatchEvent(new CustomEvent("extensions-saved"));
           flashSuccess(t("settings-page.server.saved"));
         } catch (err) {
           console.warn("[settings] autocomplete toggle failed", err);
           if (token !== reqToken) return;
-          input.checked = prevChecked;
+          input.checked = confirmed;
           flashError(t("settings-page.server.save-failed-network"));
         }
       });
