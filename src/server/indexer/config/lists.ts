@@ -1,7 +1,10 @@
 import { readFile } from "fs/promises";
 import { indexerConfigFile } from "../../utils/paths";
 import { writeJsonAtomic } from "../../utils/atomic-json";
-import { getInstanceSettings } from "../../utils/server-settings";
+import {
+  getInstanceSettings,
+  type ServerSettingValue,
+} from "../../utils/server-settings";
 import { asString } from "../../utils/plugin-settings";
 import { logger } from "../../utils/logger";
 import {
@@ -31,7 +34,7 @@ const emptyLists = (): IndexerLists => ({
   degoogIndexerWordBlocklist: "",
 });
 
-const fromSettings = (s: Record<string, unknown>): IndexerLists => {
+const fromSettings = (s: Record<string, ServerSettingValue>): IndexerLists => {
   const lists = emptyLists();
   for (const key of OVERSIZED_TEXT_FIELDS) lists[key] = asString(s[key]);
   return lists;
