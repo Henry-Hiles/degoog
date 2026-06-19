@@ -86,7 +86,7 @@ router.get("/", async (c) => {
 
 const _buildResultActionsScript = async (c: Context): Promise<string> => {
   const token = canBalrogPass(c);
-  const authenticated = await gandalf(token, c);
+  const authenticated = await gandalf(token);
   let blockUi = false;
   let replaceUi = false;
   let scoreUi = false;
@@ -229,7 +229,7 @@ router.get("/opensearch.xml", (c) => {
 
 router.post("/api/cache/clear", async (c) => {
   const token = canBalrogPass(c);
-  if (!(await gandalf(token, c)))
+  if (!(await gandalf(token)))
     return c.json({ error: "You shall not pass!" }, 401);
   const requested = c.req.query("scope") ?? cache.CACHE_SCOPE.ALL;
   if (!cache.isCacheScope(requested)) {

@@ -8,9 +8,6 @@ import { getBaseUrl } from "../../../../utils/base-url";
 import { outgoingFetch } from "../../../../utils/outgoing";
 import { logger } from "../../../../utils/logger";
 
-// ip-api.com fields and the echoed query are third-party / user-influenced and
-// land in an innerHTML sink on the client that also re-executes <script>, so
-// every interpolated value must be HTML-escaped before building the markup.
 const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, "&amp;")

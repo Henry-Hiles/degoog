@@ -4,8 +4,7 @@
 #
 # Setup:
 #   mkdir -p ./data && sudo chown -R 1000:1000 ./data
-#   Set POSTGRES_PASSWORD in a .env file (or the environment) before starting;
-#   startup fails fast if it is unset.
+#   Change POSTGRES_PASSWORD below before starting.
 
 services:
   degoog:
@@ -16,7 +15,7 @@ services:
       - "4444:4444"
     restart: unless-stopped
     environment:
-      DEGOOG_POSTGRES: "postgresql://degoog:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@degoog-postgres:5432/degoog"
+      DEGOOG_POSTGRES: "postgresql://degoog:changeme@degoog-postgres:5432/degoog"
     depends_on:
       degoog-postgres:
         condition: service_healthy
@@ -27,7 +26,7 @@ services:
     environment:
       POSTGRES_DB: degoog
       POSTGRES_USER: degoog
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: changeme
     volumes:
       - postgres-data:/var/lib/postgresql/data
     user: "70:70"

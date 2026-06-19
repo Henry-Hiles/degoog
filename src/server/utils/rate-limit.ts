@@ -98,14 +98,10 @@ export const checkRateLimit = (
   if (!timestamps) {
     timestamps = [];
     if (store.size >= MAX_IPS) {
-      // timestamps are appended in order, so ts[0] is the oldest for each key.
-      // Avoid Math.min(...ts) — spreading a large array risks a call-stack
-      // overflow and turns eviction into an O(keys × timestamps) scan that an
-      // IP-rotating attacker can weaponise.
       let oldestKey: string | null = null;
       let oldestMin = Infinity;
       for (const [k, ts] of store) {
-        const minT = ts.length > 0 ? ts[0] : 0;
+        const minT = Math.min(...ts);
         if (minT < oldestMin) {
           oldestMin = minT;
           oldestKey = k;

@@ -185,9 +185,6 @@ router.get("/api/proxy/image", async (c) => {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=86400",
       "X-Content-Type-Options": "nosniff",
-      // Neutralise scriptable image formats (notably SVG) served same-origin:
-      // no resource may load or script may run from the proxied document.
-      "Content-Security-Policy": "default-src 'none'; sandbox; style-src 'unsafe-inline'",
       "Content-Disposition": `inline; filename="${getProxyFilename(url, contentType)}"`,
     });
   } catch (err) {
@@ -199,10 +196,7 @@ router.get("/api/proxy/image", async (c) => {
 
 const FAVICON_TIMEOUT_MS = 5_000;
 const FAVICON_MAX_CONTENT_LENGTH = 512 * 1024;
-// Favicons are images; text/html would mean a redirect landed on a page, which
-// must not be proxied and served back same-origin.
-const FAVICON_CONTENT_TYPES = ["image/"];
-const FAVICON_NO_LOCAL: LocalImageAccess = { enabled: false, patterns: [] };
+const FAVICON_CONTENT_TYPES = ["image/", "text/html"];
 
 router.get("/api/proxy/favicon", async (c) => {
   const domain = c.req.query("domain")?.trim();
@@ -219,15 +213,13 @@ router.get("/api/proxy/favicon", async (c) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FAVICON_TIMEOUT_MS);
     try {
-      // Validate every redirect hop against the SSRF guard rather than letting
-      // the trusted upstream redirect us to an arbitrary (internal) address.
-      const res = await followRedirects(faviconUrl, {
+      const res = await outgoingFetch(faviconUrl, {
         signal: controller.signal,
         headers: { "User-Agent": getRandomUserAgent() },
-        access: FAVICON_NO_LOCAL,
+        redirect: "follow",
       });
       clearTimeout(timeout);
-      if (!res || !res.ok) continue;
+      if (!res.ok) continue;
       const contentType = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
       if (!FAVICON_CONTENT_TYPES.some((t) => contentType.startsWith(t))) continue;
       const body = await readBodyCapped(res, FAVICON_MAX_CONTENT_LENGTH);
@@ -236,7 +228,6 @@ router.get("/api/proxy/favicon", async (c) => {
         "Content-Type": contentType || "image/x-icon",
         "Cache-Control": "public, max-age=86400",
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "default-src 'none'; sandbox; style-src 'unsafe-inline'",
       });
     } catch (err) {
       logger.debug("proxy", "favicon fetch failed", err);

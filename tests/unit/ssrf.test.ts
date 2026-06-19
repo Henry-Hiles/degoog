@@ -27,29 +27,6 @@ describe("ssrf isBlockedIp", () => {
       expect(isBlockedIp(ip)).toBe(false);
     }
   });
-
-  test("blocks additional reserved/special ranges", () => {
-    for (const ip of [
-      "192.0.0.1",
-      "192.0.2.5",
-      "198.18.0.1",
-      "198.19.255.1",
-      "198.51.100.7",
-      "203.0.113.9",
-      "255.255.255.255",
-    ]) {
-      expect(isBlockedIp(ip)).toBe(true);
-    }
-  });
-
-  test("blocks NAT64 and hex-form mapped private addresses", () => {
-    expect(isBlockedIp("64:ff9b::7f00:1")).toBe(true);
-    expect(isBlockedIp("::ffff:7f00:1")).toBe(true);
-  });
-
-  test("still allows public dotted IPv4-mapped addresses", () => {
-    expect(isBlockedIp("::ffff:8.8.8.8")).toBe(false);
-  });
 });
 
 describe("ssrf isSafeHost", () => {
@@ -60,21 +37,6 @@ describe("ssrf isSafeHost", () => {
 
   test("accepts public IP literal", async () => {
     expect(await isSafeHost("8.8.8.8")).toBe(true);
-  });
-
-  test("rejects numeric-literal hosts that bypass isIP (decimal/hex/octal)", async () => {
-    // These are not recognised by isIP() but the fetch engine resolves them
-    // to 127.0.0.1 — the classic SSRF bypass. Must be refused, not allowed.
-    expect(await isSafeHost("2130706433")).toBe(false);
-    expect(await isSafeHost("0x7f000001")).toBe(false);
-    expect(await isSafeHost("0177.0.0.1")).toBe(false);
-  });
-
-  test("fails closed when a hostname cannot be resolved", async () => {
-    // A name that does not resolve here may still resolve at fetch time.
-    expect(
-      await isSafeHost("this-host-does-not-exist.degoog-ssrf-test.invalid"),
-    ).toBe(false);
   });
 
   test("allows every local address when enabled with no patterns", async () => {

@@ -26,7 +26,7 @@ router.get("/api/themes", (c) => {
 
 router.post("/api/theme/active", async (c) => {
   const token = canBalrogPass(c);
-  if (!(await gandalf(token, c)))
+  if (!(await gandalf(token)))
     return c.json({ error: "You shall not pass!" }, 401);
   let body: { id: string | null };
   try {

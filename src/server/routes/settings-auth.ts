@@ -4,7 +4,7 @@ import { asString, getSettings } from "../utils/plugin-settings";
 import { getAdminPath, isPublicInstance } from "../utils/public-instance";
 import { logger } from "../utils/logger";
 import { getBasePath } from "../utils/base-url";
-import { getClientIp, isHttpsRequest, isLoopbackClient } from "../utils/request";
+import { getClientIp, isHttpsRequest } from "../utils/request";
 import {
   TOKEN_TTL_MS,
   checkAuthRate,
@@ -68,9 +68,11 @@ export function canBalrogPass(c: Context): string | undefined {
     logger.debug("settings-auth", "token source: x-settings-token header");
     return fromHeader;
   }
-  // The session token is a secret equivalent to the HttpOnly cookie; never
-  // accept it from the query string where it would leak via logs, browser
-  // history and the Referer header.
+  const fromQuery = c.req.query("token");
+  if (fromQuery) {
+    logger.debug("settings-auth", "token source: query param");
+    return fromQuery;
+  }
   return getTokenFromCookie(c);
 }
 
@@ -79,7 +81,7 @@ export async function guardSettingsRoute(
   route: string,
 ): Promise<Response | null> {
   const token = canBalrogPass(c);
-  const valid = await gandalf(token, c);
+  const valid = await gandalf(token);
   if (!valid) {
     logger.debug("settings-auth", `401 on ${route}`);
     return c.json({ error: "You shall not pass!" }, 401);
@@ -91,7 +93,7 @@ export async function shouldServeSettingsGate(c: Context): Promise<boolean> {
   const required = await isAuthRequired();
   if (!required) return false;
   const token = canBalrogPass(c);
-  const valid = await gandalf(token, c);
+  const valid = await gandalf(token);
   return !valid;
 }
 
@@ -107,10 +109,7 @@ export function isPasswordRequired(): boolean {
   return getPasswords().length > 0;
 }
 
-export async function gandalf(
-  token: string | undefined,
-  _c?: Context,
-): Promise<boolean> {
+export async function gandalf(token: string | undefined): Promise<boolean> {
   if (isPublicInstance() && !isPasswordRequired()) return false;
   const required = await isAuthRequired();
   if (!required) return true;
@@ -132,40 +131,6 @@ export async function gandalf(
     return false;
   }
   return true;
-}
-
-/**
- * Strict gate for routes that execute code or destroy data (store
- * repo/install/uninstall/refresh, indexer import/clear).
- *
- * Unlike gandalf, an instance with no password or settings gate configured
- * does NOT grant blanket access here: the action is allowed only from the
- * loopback interface. A remote or proxied caller must configure
- * DEGOOG_SETTINGS_PASSWORDS or a settingsGate first. This prevents an exposed
- * default install from being driven into plugin installation — which imports
- * and runs attacker-supplied code in the server process.
- */
-export async function guardPrivilegedAction(
-  c: Context,
-  route: string,
-): Promise<Response | null> {
-  const denied = c.json(
-    {
-      error:
-        "This action runs code or deletes data and requires authentication. " +
-        "Set DEGOOG_SETTINGS_PASSWORDS (or a settings gate), or perform it locally.",
-    },
-    401,
-  );
-  if (await isAuthRequired()) {
-    return (await gandalf(canBalrogPass(c), c)) ? null : denied;
-  }
-  if (isPublicInstance()) return denied;
-  if (!isLoopbackClient(c)) {
-    logger.warn("settings-auth", `403 on ${route}: privileged action from non-loopback with no auth configured`);
-    return denied;
-  }
-  return null;
 }
 
 async function getSelectedMiddlewareForSettingsGate(): Promise<
@@ -190,7 +155,7 @@ router.get("/api/settings/auth", async (c) => {
   if (!required) return c.json({ required: false, valid: true });
 
   const token = canBalrogPass(c);
-  if (await gandalf(token, c)) return c.json({ required: true, valid: true });
+  if (await gandalf(token)) return c.json({ required: true, valid: true });
 
   const m = await getSelectedMiddlewareForSettingsGate();
   if (!m) {
