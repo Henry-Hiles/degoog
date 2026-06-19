@@ -5,10 +5,11 @@ export const screenshotUrl = (
   type: string,
   itemSlug: string,
   filename: string,
-  token: string | null,
+  _token?: string | null,
 ): string => {
-  const q = token ? `?token=${encodeURIComponent(token)}` : "";
-  return `${getBase()}/api/store/screenshots/${encodeURIComponent(repoSlug)}/${encodeURIComponent(type)}/${encodeURIComponent(itemSlug)}/${encodeURIComponent(filename)}${q}`;
+  // Authenticated via the HttpOnly settings-token cookie sent with the image
+  // request; the token must not appear in the URL where it would leak.
+  return `${getBase()}/api/store/screenshots/${encodeURIComponent(repoSlug)}/${encodeURIComponent(type)}/${encodeURIComponent(itemSlug)}/${encodeURIComponent(filename)}`;
 };
 
 export const buildScreenshotUrls = (

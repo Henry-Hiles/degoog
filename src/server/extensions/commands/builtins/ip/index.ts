@@ -8,6 +8,17 @@ import { getBaseUrl } from "../../../../utils/base-url";
 import { outgoingFetch } from "../../../../utils/outgoing";
 import { logger } from "../../../../utils/logger";
 
+// ip-api.com fields and the echoed query are third-party / user-influenced and
+// land in an innerHTML sink on the client that also re-executes <script>, so
+// every interpolated value must be HTML-escaped before building the markup.
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 export const ipCommand: BangCommand = {
   name: "IP Lookup",
   get description(): string {
@@ -49,7 +60,7 @@ export const ipCommand: BangCommand = {
       if (data.status === "fail") {
         return {
           title: this.t!("ip.title"),
-          html: `<div><p>${this.t!("ip.lookup-failed", { message: data.message })}</p></div>`,
+          html: `<div><p>${escapeHtml(this.t!("ip.lookup-failed", { message: data.message }))}</p></div>`,
         };
       }
       const na = this.t!("ip.na");
@@ -65,7 +76,7 @@ export const ipCommand: BangCommand = {
       const rows = fields
         .map(
           ([k, v]) =>
-            `<div class="ip-row"><span class="ip-label">${k}</span><span class="ip-value">${v || na}</span></div>`,
+            `<div class="ip-row"><span class="ip-label">${escapeHtml(String(k))}</span><span class="ip-value">${escapeHtml(String(v || na))}</span></div>`,
         )
         .join("");
       return {

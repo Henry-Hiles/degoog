@@ -24,7 +24,7 @@ router.get("/api/server-settings", async (c) => {
 });
 
 router.patch("/api/server-settings", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   try {
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;

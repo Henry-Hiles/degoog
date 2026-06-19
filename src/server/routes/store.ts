@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { existsSync } from "fs";
-import { canBalrogPass, gandalf } from "./settings-auth";
+import { canBalrogPass, gandalf, guardPrivilegedAction } from "./settings-auth";
 import { resolve, relative } from "path";
 
 import {
@@ -48,14 +48,14 @@ function getStoreItemPath(type: ExtensionStoreType, item: string): string {
 }
 
 router.get("/api/store/repos", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const repos = await getRepos();
   return c.json({ repos });
 });
 
 router.get("/api/store/repos/:repoSlug/asset", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const repoSlug = c.req.param("repoSlug");
   const pathParam = c.req.query("path");
@@ -80,15 +80,15 @@ router.get("/api/store/repos/:repoSlug/asset", async (c) => {
 });
 
 router.get("/api/store/repos/status", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const statuses = await getReposStatus();
   return c.json({ statuses });
 });
 
 router.post("/api/store/repos", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "POST /api/store/repos");
+  if (denied) return denied;
   const body = await c.req.json<{ url?: string }>();
   const url = body?.url?.trim();
   if (!url) return c.json({ error: "Missing url" }, 400);
@@ -102,8 +102,8 @@ router.post("/api/store/repos", async (c) => {
 });
 
 router.delete("/api/store/repos", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "DELETE /api/store/repos");
+  if (denied) return denied;
   const body = (await c.req.json<{ url?: string }>().catch(() => ({}))) as {
     url?: string;
   };
@@ -120,8 +120,8 @@ router.delete("/api/store/repos", async (c) => {
 });
 
 router.post("/api/store/repos/refresh", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "POST /api/store/repos/refresh");
+  if (denied) return denied;
   const body = (await c.req.json<{ url?: string }>().catch(() => ({}))) as {
     url?: string;
   };
@@ -140,14 +140,14 @@ router.post("/api/store/repos/refresh", async (c) => {
 });
 
 router.get("/api/store/items", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const items = await listRepoItems();
   return c.json({ items });
 });
 
 router.get("/api/store/items/:repoSlug", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const repoSlug = c.req.param("repoSlug");
   const repos = await getRepos();
@@ -158,8 +158,8 @@ router.get("/api/store/items/:repoSlug", async (c) => {
 });
 
 router.post("/api/store/install", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "POST /api/store/install");
+  if (denied) return denied;
   const body = await c.req.json<{
     repoUrl?: string;
     itemPath?: string;
@@ -182,8 +182,8 @@ router.post("/api/store/install", async (c) => {
 });
 
 router.post("/api/store/uninstall", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "POST /api/store/uninstall");
+  if (denied) return denied;
   const body = await c.req.json<{
     repoUrl?: string;
     itemPath?: string;
@@ -206,8 +206,8 @@ router.post("/api/store/uninstall", async (c) => {
 });
 
 router.post("/api/store/update", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "POST /api/store/update");
+  if (denied) return denied;
   const body = await c.req.json<{
     repoUrl?: string;
     itemPath?: string;
@@ -230,8 +230,8 @@ router.post("/api/store/update", async (c) => {
 });
 
 router.post("/api/store/update-all", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "POST /api/store/update-all");
+  if (denied) return denied;
   try {
     const result = await updateAllItems();
     return c.json({ ok: true, ...result });
@@ -242,8 +242,8 @@ router.post("/api/store/update-all", async (c) => {
 });
 
 router.delete("/api/store/untracked", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
-    return c.json({ error: "You shall not pass!" }, 401);
+  const denied = await guardPrivilegedAction(c, "DELETE /api/store/untracked");
+  if (denied) return denied;
   const body = (await c.req.json<{ type?: string; folderName?: string }>().catch(() => ({}))) as {
     type?: string;
     folderName?: string;
@@ -265,7 +265,7 @@ router.delete("/api/store/untracked", async (c) => {
 });
 
 router.get("/api/store/installed", async (c) => {
-  if (!(await gandalf(canBalrogPass(c))))
+  if (!(await gandalf(canBalrogPass(c), c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const installed = await getInstalledItems();
   return c.json({ installed });
@@ -274,7 +274,7 @@ router.get("/api/store/installed", async (c) => {
 router.get(
   `${getBaseUrl()}/api/store/screenshots/:repoSlug/:type/:item/:filename`,
   async (c) => {
-    if (!(await gandalf(canBalrogPass(c))))
+    if (!(await gandalf(canBalrogPass(c), c)))
       return c.json({ error: "You shall not pass!" }, 401);
     const repoSlug = c.req.param("repoSlug");
     const typeParam = c.req.param("type");

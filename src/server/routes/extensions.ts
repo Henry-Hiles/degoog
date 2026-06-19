@@ -113,7 +113,7 @@ router.get("/api/extensions", async (c) => {
     }
   }
 
-  const authenticated = await gandalf(canBalrogPass(c));
+  const authenticated = await gandalf(canBalrogPass(c), c);
   const redact = (items: ExtensionMeta[]): ExtensionMeta[] =>
     authenticated ? items : items.map((m) => ({ ...m, settings: {} }));
 
@@ -128,7 +128,7 @@ router.get("/api/extensions", async (c) => {
 
 router.post("/api/extensions/:id/settings", async (c) => {
   const token = canBalrogPass(c);
-  if (!(await gandalf(token)))
+  if (!(await gandalf(token, c)))
     return c.json({ error: "You shall not pass!" }, 401);
   const id = c.req.param("id");
   const body = await readObjectBody<Record<string, unknown>>(c);
@@ -264,7 +264,7 @@ router.post("/api/extensions/:id/settings", async (c) => {
 
 router.post("/api/extensions/transports/:name/test", async (c) => {
   const token = canBalrogPass(c);
-  if (!(await gandalf(token)))
+  if (!(await gandalf(token, c)))
     return c.json({ error: "You shall not pass!" }, 401);
 
   const name = c.req.param("name");
@@ -283,7 +283,7 @@ router.post("/api/extensions/transports/:name/test", async (c) => {
 
 router.get("/api/extensions/:id/readme", async (c) => {
   const token = canBalrogPass(c);
-  if (!(await gandalf(token)))
+  if (!(await gandalf(token, c)))
     return c.json({ error: "You shall not pass!" }, 401);
 
   const id = c.req.param("id");

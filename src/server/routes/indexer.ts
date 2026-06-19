@@ -16,7 +16,7 @@ import { buildSqliteExport } from "../indexer/export/builder";
 import { indexerDbForType } from "../utils/paths";
 import { getInstanceSettings } from "../utils/server-settings";
 import { asBoolean } from "../utils/plugin-settings";
-import { guardSettingsRoute } from "./settings-auth";
+import { guardSettingsRoute, guardPrivilegedAction } from "./settings-auth";
 import { _applyRateLimit } from "../utils/search";
 import { getClientIp } from "../utils/request";
 import { logger } from "../utils/logger";
@@ -42,8 +42,12 @@ const gatePublic = async (): Promise<boolean> => {
   );
 };
 
+// Key the export cooldown on the client IP only. The public (unauthenticated)
+// export path lets the caller set x-settings-token freely, so trusting it would
+// let an attacker mint a fresh cooldown bucket per request and bypass the
+// throttle entirely.
 const clientKey = (c: Parameters<typeof getClientIp>[0]): string =>
-  c.req.header("x-settings-token") ?? getClientIp(c) ?? "unknown";
+  getClientIp(c) ?? "unknown";
 
 router.get("/api/indexer/stats", async (c) => {
   const limitRes = await _applyRateLimit(c);
@@ -220,7 +224,7 @@ router.post("/api/indexer/import", async (c) => {
 
   if (!(await gateMaster())) return c.json({ error: "Indexer is disabled" }, 404);
 
-  const denied = await guardSettingsRoute(c, "POST /api/indexer/import");
+  const denied = await guardPrivilegedAction(c, "POST /api/indexer/import");
   if (denied) return denied;
 
   let formData: FormData;
@@ -258,7 +262,7 @@ router.post("/api/indexer/clear", async (c) => {
 
   if (!(await gateMaster())) return c.json({ error: "Indexer is disabled" }, 404);
 
-  const denied = await guardSettingsRoute(c, "POST /api/indexer/clear");
+  const denied = await guardPrivilegedAction(c, "POST /api/indexer/clear");
   if (denied) return denied;
 
   let body: { confirm?: boolean };

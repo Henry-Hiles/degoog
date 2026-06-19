@@ -31,14 +31,15 @@ export function formatRelativeTime(iso: string): string {
 
 export function repoImageSrc(
   repo: RepoInfo,
-  getToken: () => string | null,
+  _getToken?: () => string | null,
 ): string {
   const img = repo.repoImage;
   if (!img) return "";
   if (/^https?:\/\//i.test(img)) return img;
-  const token = getToken();
-  const q = token ? `&token=${encodeURIComponent(token)}` : "";
-  return `${getBase()}/api/store/repos/${encodeURIComponent(repo.localPath)}/asset?path=${encodeURIComponent(img)}${q}`;
+  // The asset route authenticates via the HttpOnly settings-token cookie that
+  // the browser sends with image requests; never put the token in the URL
+  // where it would leak via logs, history and the Referer header.
+  return `${getBase()}/api/store/repos/${encodeURIComponent(repo.localPath)}/asset?path=${encodeURIComponent(img)}`;
 }
 
 export function pluginTypeLabel(type: string): string {
