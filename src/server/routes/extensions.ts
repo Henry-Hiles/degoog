@@ -57,7 +57,8 @@ type ExtensionGroupKey =
   | "plugins"
   | "themes"
   | "transports"
-  | "autocomplete";
+  | "autocomplete"
+  | "shortcuts";
 
 const EXTENSION_TYPE_KEY: Record<ExtensionStoreType, ExtensionGroupKey> = {
   [ExtensionStoreType.Engine]: "engines",
@@ -65,6 +66,7 @@ const EXTENSION_TYPE_KEY: Record<ExtensionStoreType, ExtensionGroupKey> = {
   [ExtensionStoreType.Theme]: "themes",
   [ExtensionStoreType.Transport]: "transports",
   [ExtensionStoreType.Autocomplete]: "autocomplete",
+  [ExtensionStoreType.Shortcut]: "shortcuts",
 };
 
 

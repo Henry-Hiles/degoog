@@ -1,12 +1,14 @@
 import { getSettings, setSettings, type SettingValue } from "./plugin-settings";
-import type { ShortcutBinding } from "../../shared/shortcuts";
-import { parseShortcutsMap, type ShortcutActionMeta } from "../../shared/shortcuts";
+import {
+  parseShortcutsMap,
+  type ShortcutBinding,
+  type ShortcutActionMeta,
+} from "../../shared/shortcuts";
 
 export interface ShortcutsSettings {
   bindings: Record<string, ShortcutBinding>;
 }
 
-const DEFAULT_SETTINGS: ShortcutsSettings = { bindings: {} };
 const SETTINGS_ID = "shortcuts";
 const MODIFIER_KEYS = ["ctrl", "meta", "alt", "shift"] as const;
 const BINDING_KEYS = new Set<string>(["key", ...MODIFIER_KEYS]);
