@@ -7,6 +7,7 @@ import { clearServerSettingsCache } from "../../src/server/utils/server-settings
 
 let tempDir: string;
 let savedDataDir: string | undefined;
+let savedSettingsFile: string | undefined;
 let savedPublic: string | undefined;
 let savedPasswords: string | undefined;
 let savedDanger: string | undefined;
@@ -18,12 +19,14 @@ const restoreEnv = (name: string, value: string | undefined): void => {
 
 beforeEach(() => {
   savedDataDir = process.env.DEGOOG_DATA_DIR;
+  savedSettingsFile = process.env.DEGOOG_SERVER_SETTINGS_FILE;
   savedPublic = process.env.DEGOOG_PUBLIC_INSTANCE;
   savedPasswords = process.env.DEGOOG_SETTINGS_PASSWORDS;
   savedDanger = process.env.DEGOOG_DANGEROUSLY_NO_PASSWORD;
 
   tempDir = mkdtempSync(join(tmpdir(), "degoog-server-settings-"));
   process.env.DEGOOG_DATA_DIR = tempDir;
+  process.env.DEGOOG_SERVER_SETTINGS_FILE = join(tempDir, "server-settings.json");
   delete process.env.DEGOOG_PUBLIC_INSTANCE;
   delete process.env.DEGOOG_DANGEROUSLY_NO_PASSWORD;
   clearServerSettingsCache();
@@ -33,6 +36,7 @@ afterEach(() => {
   clearServerSettingsCache();
   rmSync(tempDir, { recursive: true, force: true });
   restoreEnv("DEGOOG_DATA_DIR", savedDataDir);
+  restoreEnv("DEGOOG_SERVER_SETTINGS_FILE", savedSettingsFile);
   restoreEnv("DEGOOG_PUBLIC_INSTANCE", savedPublic);
   restoreEnv("DEGOOG_SETTINGS_PASSWORDS", savedPasswords);
   restoreEnv("DEGOOG_DANGEROUSLY_NO_PASSWORD", savedDanger);
