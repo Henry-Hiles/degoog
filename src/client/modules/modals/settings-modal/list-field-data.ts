@@ -9,7 +9,7 @@ export const isListDisplay = (sub: SettingField): boolean =>
   sub.type === "info";
 
 const _isFillable = (sub: SettingField): boolean =>
-  !isListToggle(sub) && !isListDisplay(sub) && sub.type !== "select";
+  !isListToggle(sub) && !isListDisplay(sub);
 
 export const defaultListRow = (itemSchema: SettingField[]): ListRow => {
   const row: ListRow = {};

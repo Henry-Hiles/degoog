@@ -17,10 +17,10 @@ const _renderToggle = (sub: SettingField, value: string): string => {
   const checked = value === "true" ? " checked" : "";
   return `<label class="ext-list-sub ext-list-sub--toggle">
       <span class="ext-list-sub-label">${escapeHtml(sub.label)}</span>
-      <label class="engine-toggle degoog-toggle-wrap degoog-toggle-wrap--transparent">
+      <div class="engine-toggle degoog-toggle-wrap degoog-toggle-wrap--transparent">
         <input type="checkbox" class="ext-list-subfield" data-subkey="${escapeHtml(sub.key)}" data-subtype="toggle"${checked}>
         <span class="toggle-slider degoog-toggle"></span>
-      </label>
+      </div>
     </label>`;
 };
 

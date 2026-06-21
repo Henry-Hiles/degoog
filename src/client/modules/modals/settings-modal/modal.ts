@@ -154,7 +154,9 @@ const _advancedFieldDiffersFromDefault = (
 
   if (field.type === "list") {
     const val = typeof raw === "string" ? raw.trim() : "";
-    return val !== "" && val !== "[]";
+    const normalized = val === "[]" ? "" : val;
+    const def = defaultStr === "[]" ? "" : defaultStr;
+    return normalized !== def;
   }
 
   if (raw === undefined) {

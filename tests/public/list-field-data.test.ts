@@ -69,6 +69,23 @@ describe("public/list-field-data", () => {
     ).toEqual([{ mode: "a" }, { mode: "b" }]);
   });
 
+  test("serializeRows keeps rows with empty text but populated select", () => {
+    const mixedSchema: SettingField[] = [
+      { key: "name", label: "Name", type: "text" },
+      { key: "mode", label: "Mode", type: "select", options: ["a", "b"] },
+    ];
+    const rows = [
+      { name: "GitHub", mode: "a" },
+      { name: "", mode: "b" },
+    ];
+    expect(
+      parseListValue(serializeRows(rows, mixedSchema), mixedSchema),
+    ).toEqual([
+      { name: "GitHub", mode: "a" },
+      { name: "", mode: "b" },
+    ]);
+  });
+
   test("rowSummary ignores toggle and info fields", () => {
     const schema: SettingField[] = [
       { key: "note", label: "Note", type: "info", default: "static" },
