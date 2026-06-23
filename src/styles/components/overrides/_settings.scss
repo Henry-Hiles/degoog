@@ -1,3 +1,7 @@
+html:has(.settings-page-body) {
+  scrollbar-gutter: stable;
+}
+
 .settings-page-body {
   min-height: 100vh;
 
@@ -30,7 +34,7 @@
 
 .settings-page {
   margin: 0 auto;
-  padding: clamp($space-6, 4vw, $space-8) clamp($space-5, 5vw, $space-7) clamp($space-9, 5vw, $space-10);
+  padding: 0 clamp($space-5, 5vw, $space-7) clamp($space-9, 5vw, $space-10);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -41,6 +45,11 @@
 }
 
 .settings-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding-top: clamp($space-6, 4vw, $space-8);
   margin-bottom: $space-6;
 }
 
@@ -91,7 +100,7 @@
     flex-shrink: 0;
     align-self: flex-start;
     position: sticky;
-    top: $space-8;
+    top: 9rem;
     margin-bottom: 0;
   }
 }
