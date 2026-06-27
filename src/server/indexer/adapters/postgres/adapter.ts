@@ -12,6 +12,7 @@ import { safeSlug } from "../../shared/safe-type";
 import { logger } from "../../../utils/logger";
 import { initPgSchema } from "./schema";
 import { runPgPrune } from "./prune";
+import { createHash } from "crypto";
 
 const IMPORT_BATCH_SIZE = 500;
 
@@ -52,26 +53,35 @@ export class PgAdapter implements IndexerAdapter {
 
     await this._sql.begin(async (tx) => initPgSchema(tx, schema));
 
-    const indexName = `idx_${schema}_hits_url_id`;
+    // PostgreSQL identifiers are limited to 63 bytes.
+    const hash = createHash("sha1").update(schema).digest("hex").slice(0, 8);
+    const prefix = "idx_";
+    const suffix = "_hits_url_id";
+    const maxSchemaLen = 63 - prefix.length - suffix.length - hash.length - 1;
+
+    const indexName = `${prefix}${schema.slice(0, maxSchemaLen)}_${hash}${suffix}`;
 
     const [index] = await this._sql<{ indisvalid: boolean }[]>`
       SELECT i.indisvalid
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_index i ON i.indexrelid = c.oid
-      WHERE c.relname = ${indexName}
+      WHERE c.relkind = 'i'
+        AND c.relname = ${indexName}
         AND n.nspname = ${schema}
     `;
 
     if (index && !index.indisvalid) {
       await this._sql`
-        DROP INDEX CONCURRENTLY ${this._sql(schema)}.${this._sql(indexName)}
+        DROP INDEX CONCURRENTLY IF EXISTS
+        ${this._sql(schema)}.${this._sql(indexName)}
       `;
     }
 
     if (!index || !index.indisvalid) {
       await this._sql`
-        CREATE INDEX CONCURRENTLY ${this._sql(indexName)}
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS
+        ${this._sql(indexName)}
         ON ${this._sql(schema)}.query_hits (url_id)
       `;
     }
