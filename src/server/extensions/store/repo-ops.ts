@@ -1,4 +1,4 @@
-import { readFile, rm, readdir } from "fs/promises";
+import { readFile, rm } from "fs/promises";
 import { join } from "path";
 import type { RepoInfo, RepoPackageJson } from "../../types";
 import { logger } from "../../utils/logger";
@@ -25,20 +25,21 @@ const _isLockError = (stderr: string): boolean =>
     stderr,
   );
 
+const STALE_LOCK_FILES = ["shallow.lock", "index.lock"];
+
 const _cleanGitLocks = async (repoPath: string): Promise<void> => {
   const gitDir = join(repoPath, ".git");
-  try {
-    const entries = await readdir(gitDir);
-    await Promise.all(
-      entries
-        .filter((e) => e.endsWith(".lock"))
-        .map((e) =>
-          rm(join(gitDir, e), { force: true }).catch(() => {}),
+  await Promise.all(
+    STALE_LOCK_FILES.map((name) =>
+      rm(join(gitDir, name), { force: true }).catch((err) =>
+        logger.debug(
+          "store:repo",
+          `could not remove stale ${name} in ${repoPath}`,
+          err,
         ),
-    );
-  } catch (err) {
-    logger.debug("store:repo", `could not clean git locks in ${repoPath}`, err);
-  }
+      ),
+    ),
+  );
 };
 
 const probeBranch = async (url: string, branch: string): Promise<boolean> => {
@@ -89,7 +90,7 @@ const headBranch = async (repoPath: string): Promise<string> => {
 const _runFetchRef = async (
   repoPath: string,
   branch: string,
-): Promise<{ exit: number; stderr: string }> => {
+): Promise<{ exit: number; stderr: string; timedOut: boolean }> => {
   const proc = Bun.spawn(
     [
       "git",
@@ -103,23 +104,32 @@ const _runFetchRef = async (
     ],
     { stdout: "ignore", stderr: "pipe" },
   );
-  const exit = await proc.exited;
-  const stderr = exit === 0 ? "" : await new Response(proc.stderr).text();
-  return { exit, stderr };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, FETCH_TIMEOUT_MS);
+  try {
+    const exit = await proc.exited;
+    const stderr = exit === 0 ? "" : await new Response(proc.stderr).text();
+    return { exit, stderr, timedOut };
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const fetchRef = async (
   repoPath: string,
   branch: string,
 ): Promise<{ ok: boolean; notFound: boolean; error: string }> => {
-  let { exit, stderr } = await _runFetchRef(repoPath, branch);
-  if (exit !== 0 && _isLockError(stderr)) {
+  let { exit, stderr, timedOut } = await _runFetchRef(repoPath, branch);
+  if (exit !== 0 && !timedOut && _isLockError(stderr)) {
     logger.warn(
       "store:repo",
       `git lock detected during fetch, clearing stale locks and retrying`,
     );
     await _cleanGitLocks(repoPath);
-    ({ exit, stderr } = await _runFetchRef(repoPath, branch));
+    ({ exit, stderr, timedOut } = await _runFetchRef(repoPath, branch));
   }
   if (exit === 0) return { ok: true, notFound: false, error: "" };
   const notFound =
@@ -129,7 +139,7 @@ const fetchRef = async (
   return {
     ok: false,
     notFound,
-    error: _sanitizeGitError(stderr),
+    error: timedOut ? "Fetch timed out" : _sanitizeGitError(stderr),
   };
 };
 
@@ -380,8 +390,14 @@ async function _refreshRepo(repo: RepoInfo): Promise<void> {
 export function refreshRepo(url?: string): Promise<void> {
   return runStoreExclusive(async () => {
     const data = await readReposData();
-    const repos = url ? [getRepoByUrl(data, url)] : data.repos;
-    const toRefresh = repos.filter((r): r is RepoInfo => r != null);
+    let toRefresh: RepoInfo[];
+    if (url) {
+      const repo = getRepoByUrl(data, url);
+      if (!repo) throw new Error("Repository not found.");
+      toRefresh = [repo];
+    } else {
+      toRefresh = data.repos;
+    }
     for (const repo of toRefresh) await _refreshRepo(repo);
     await writeReposData(data);
   });
@@ -449,15 +465,7 @@ export function getReposStatus(): Promise<RepoStatus[]> {
       const repoPath = join(storeDir, repo.localPath);
       try {
         const branch = await resolveTrackedBranch(repoPath);
-        const fetched = await Promise.race([
-          fetchRef(repoPath, branch),
-          new Promise<{ ok: boolean }>((_, rej) =>
-            setTimeout(
-              () => rej(new Error("Fetch timed out")),
-              FETCH_TIMEOUT_MS,
-            ),
-          ),
-        ]);
+        const fetched = await fetchRef(repoPath, branch);
         if (!fetched.ok) {
           results.push({ url: repo.url, behind: 0 });
           continue;

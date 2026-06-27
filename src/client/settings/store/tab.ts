@@ -413,6 +413,7 @@ export async function initStoreTab(
       }).catch(() => { });
       await loadRepos();
       await loadItems();
+      await loadReposStatus();
       render();
     })();
   } catch {

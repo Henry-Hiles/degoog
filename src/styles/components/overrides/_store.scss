@@ -623,6 +623,7 @@
   padding: $space-3;
   border-radius: inherit;
   background: var(--bg-light);
+  pointer-events: none;
 }
 
 .store-progress-label {

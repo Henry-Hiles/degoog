@@ -56,18 +56,22 @@ export async function handleRefresh(
   render: () => void,
 ): Promise<void> {
   setRepoPhase(container, url, "Refreshing", "start");
-  const res = await fetch(`${getBase()}/api/store/repos/refresh`, {
-    method: "POST",
-    headers: jsonHeaders(getToken),
-    body: JSON.stringify({ url }),
-  });
-  if (!res.ok) {
-    setRepoPhase(container, url, "Refreshing", "failed");
-    return;
+  try {
+    const res = await fetch(`${getBase()}/api/store/repos/refresh`, {
+      method: "POST",
+      headers: jsonHeaders(getToken),
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+      setRepoPhase(container, url, "Refreshing", "failed");
+      return;
+    }
+    setRepoPhase(container, url, "Refreshing", "ok");
+    await refreshAndRender();
+    void loadReposStatus().then(() => render());
+  } catch {
+    setRepoPhase(container, url, "Refreshing", "failed", "Network error");
   }
-  setRepoPhase(container, url, "Refreshing", "ok");
-  await refreshAndRender();
-  void loadReposStatus().then(() => render());
 }
 
 export async function handleRemove(
