@@ -35,6 +35,7 @@ import { getInstanceSettings } from "../../utils/server-settings";
 import { readShortcutsSettings } from "../../utils/shortcuts-settings";
 import { getClientShortcuts } from "../../extensions/shortcuts/registry";
 import { isPasswordRequired } from "../settings-auth";
+import { readSyncedDefaults } from "../../utils/synced-settings";
 
 export const DEFAULT_THEME_DIR = "src/public/themes/degoog-theme";
 const CORE_LOCALES_ROOT = "src";
@@ -220,6 +221,13 @@ export async function applyPagePlaceholders(
   const safeShortcuts = JSON.stringify(shortcutsConfig).replace(/<\//g, "<\\/");
   const shortcutsScript = `<script>window.__DEGOOG_SHORTCUTS__=${safeShortcuts}</script>`;
   result = result.replace("</head>", `${shortcutsScript}\n  </head>`);
+
+  const syncedDefaults = await readSyncedDefaults();
+  if (Object.keys(syncedDefaults).length > 0) {
+    const safeSync = JSON.stringify(syncedDefaults).replace(/<\//g, "<\\/");
+    const syncScript = `<script>window.__DEGOOG_SYNCED_DEFAULTS__=${safeSync}</script>`;
+    result = result.replace("</head>", `${syncScript}\n  </head>`);
+  }
 
   result = result.replace(
     "</head>",

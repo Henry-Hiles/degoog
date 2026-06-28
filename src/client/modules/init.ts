@@ -13,6 +13,7 @@ import { recordSettingsReturn, showHome } from "../utils/navigation";
 import { performSearch } from "../utils/search-actions";
 import { applyUovaStorage } from "../utils/uovadipasqua";
 import { initTheme } from "../utils/theme";
+import { applyDefaults } from "../utils/sync";
 import { initOptionsDropdown } from "../utils/time-filter";
 import { initImgFilters } from "./filters/image-filters";
 import { initMediaPreview } from "./media/media-preview";
@@ -41,7 +42,9 @@ type DegoogHistoryState = {
   imageFilter?: ImageFilter;
 };
 
-export function init(): void {
+export async function init(): Promise<void> {
+  await applyDefaults();
+
   renderPageTemplates();
   void applyUovaStorage();
   void initHomeWizard();
