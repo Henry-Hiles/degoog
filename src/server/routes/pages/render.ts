@@ -36,6 +36,7 @@ import { readShortcutsSettings } from "../../utils/shortcuts-settings";
 import { getClientShortcuts } from "../../extensions/shortcuts/registry";
 import { isPasswordRequired } from "../settings-auth";
 import { readSyncedDefaults } from "../../utils/synced-settings";
+import { buildSettingsNav, buildSettingsTabSelect } from "./settings-nav";
 
 export const DEFAULT_THEME_DIR = "src/public/themes/degoog-theme";
 const CORE_LOCALES_ROOT = "src";
@@ -318,6 +319,12 @@ export async function buildPage(
       ? _apiKeySection
       : _apiKeySectionLocked;
     html = html.replace("__API_KEY_SECTION__", content);
+  }
+  if (html.includes("__SETTINGS_NAV__")) {
+    html = html.replace("__SETTINGS_NAV__", buildSettingsNav());
+  }
+  if (html.includes("__SETTINGS_TAB_SELECT__")) {
+    html = html.replace("__SETTINGS_TAB_SELECT__", buildSettingsTabSelect());
   }
   const t = await getTranslator(locale);
   return applyPagePlaceholders(html, t, locale);
