@@ -207,7 +207,7 @@
   align-items: center;
   justify-content: space-between;
   gap: $space-3;
-  padding: $space-2 $space-3;
+  padding: $space-3;
   background: var(--bg-hover);
   border-radius: $radius-md;
 }
@@ -465,6 +465,24 @@
   button {
     flex: 1;
     min-width: 0;
+  }
+}
+
+.store-btn-update-icon {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: $radius-md;
+  color: $primary;
+  cursor: pointer;
+  flex: none;
+  font-size: $font-size-md;
+  padding: $space-2 $space-3;
+  transition: opacity $transition-fast;
+
+  &:hover {
+    opacity: 0.7;
   }
 }
 
