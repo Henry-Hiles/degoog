@@ -66,6 +66,11 @@ async function _initStreamingTypeChecks(
   } catch { /* fall through */ }
   if (!types.length) types = ["web", "images", "videos", "news", "files"];
 
+  if (types.length <= 1) {
+    container.remove();
+    return;
+  }
+
   const _save = async (): Promise<void> => {
     const checks = container.querySelectorAll<HTMLInputElement>("input[type=checkbox]");
     const nowDisabled = [...checks].filter((c) => !c.checked).map((c) => c.value).join("\n");
