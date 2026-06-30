@@ -1,3 +1,5 @@
+import type { EngineFilters } from "../../shared/engine-filters";
+
 export type SettingFieldType =
   | "text"
   | "number"
@@ -79,6 +81,7 @@ export interface EngineRegistry {
     primaryType: string;
     searchTypes: string[];
     disabledByDefault?: boolean;
+    filters?: EngineFilters;
   }>;
   defaults?: Record<string, boolean>;
 }
