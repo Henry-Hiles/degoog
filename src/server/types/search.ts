@@ -77,6 +77,8 @@ export interface SearchBody {
   imgSize?: string;
   imgType?: string;
   imgLayout?: string;
+  safeMode?: string;
+  /** @deprecated use safeMode; still read for old bookmarks/clients. */
   imgNsfw?: string;
 }
 

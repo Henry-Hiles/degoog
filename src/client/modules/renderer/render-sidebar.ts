@@ -40,10 +40,8 @@ export const sidebarAccordion = (title: string, content: string): string =>
 export const engineStatsHtml = (timings: EngineTiming[]): string => {
   if (!state.displayEnginePerformance || timings.length === 0) return "";
 
-  const maxTime = Math.max(...timings.map((e) => e.time));
   let statsContent = "";
   timings.forEach((et) => {
-    const barWidth = Math.min(100, (et.time / maxTime) * 100);
     const isIndexed = et.resultCount === 0 && et.indexed === true;
     const statusClass = et.resultCount === 0 && !isIndexed ? " engine-failed" : "";
     const resultsLabel = t("search-templates.sidebar.results", {
@@ -66,7 +64,6 @@ export const engineStatsHtml = (timings: EngineTiming[]): string => {
         </div>
         ${action}
       </div>`;
-    void barWidth;
   });
 
   return sidebarAccordion(

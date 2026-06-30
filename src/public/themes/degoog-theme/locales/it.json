@@ -48,7 +48,7 @@
     },
     "image-filters": {
       "title": "Filtri",
-      "any": "Tutti",
+      "default": "Predefinito",
       "toggle": "Filtri",
       "close": "Chiudi filtri",
       "size": "Dimensione",

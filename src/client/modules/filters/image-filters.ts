@@ -38,6 +38,7 @@ const buildUnion = async (): Promise<Record<string, string[]>> => {
     if (!(engine.searchTypes ?? []).includes("images")) continue;
     if (!engine.filters) continue;
     for (const [group, values] of Object.entries(engine.filters)) {
+      if (!GROUP_ORDER.includes(group)) continue;
       const bucket = union[group] ?? (union[group] = []);
       for (const value of values) {
         if (!bucket.includes(value)) bucket.push(value);
@@ -52,6 +53,16 @@ const orderedGroups = (union: Record<string, string[]>): string[] => [
   ...Object.keys(union).filter((g) => !GROUP_ORDER.includes(g)),
 ];
 
+const pruneStaleFilters = (union: Record<string, string[]>): void => {
+  const current = filters();
+  for (const group of Object.keys(current)) {
+    const value = current[group];
+    if (value && !(union[group] ?? []).includes(value)) {
+      current[group] = "";
+    }
+  }
+};
+
 const activeValue = (group: string, values: string[]): string => {
   const current = filters()[group];
   return current && values.includes(current) ? current : "";
@@ -59,7 +70,7 @@ const activeValue = (group: string, values: string[]): string => {
 
 const optionHtml = (group: string, value: string, active: string): string => {
   const isActive = value === active;
-  const label = value === "" ? tf("any") : labelFor(value);
+  const label = value === "" ? tf("default") : labelFor(value);
   return `<button type="button" class="degoog-img-filter-option${isActive ? " is-active" : ""}" role="radio" aria-checked="${isActive ? "true" : "false"}" data-group="${escapeAttribute(group)}" data-value="${escapeAttribute(value)}">
       <span class="degoog-img-filter-text">${escapeHtml(label)}</span>
     </button>`;
@@ -79,7 +90,7 @@ const groupHtml = (
     ...values.map((value) => optionHtml(group, value, active)),
   ].join("");
   return `<div class="degoog-accordion degoog-img-filter-group degoog-panel degoog-panel--accordion degoog-panel--stack-item">
-      <button class="degoog-accordion-toggle" type="button">
+      <button class="degoog-accordion-toggle" type="button" aria-expanded="false">
         <span class="degoog-img-filter-head">${escapeHtml(title)}${suffix}</span>
         ${CHEVRON_SVG}
       </button>
@@ -130,12 +141,16 @@ const wireAccordions = (bar: HTMLElement): void => {
   bar
     .querySelectorAll<HTMLElement>(".degoog-accordion-toggle")
     .forEach((btn) => {
+      const group = btn.closest(".degoog-accordion, .sidebar-accordion");
+      btn.setAttribute(
+        "aria-expanded",
+        group?.classList.contains("open") ? "true" : "false",
+      );
       if (btn.dataset.imgToggleWired === "true") return;
       btn.dataset.imgToggleWired = "true";
       btn.addEventListener("click", () => {
-        btn
-          .closest(".degoog-accordion, .sidebar-accordion")
-          ?.classList.toggle("open");
+        const open = group?.classList.toggle("open") ?? false;
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
       });
     });
 
@@ -153,6 +168,7 @@ const buildGroups = async (): Promise<void> => {
   if (!groupsEl) return;
 
   const union = await buildUnion();
+  pruneStaleFilters(union);
   const groups = orderedGroups(union);
   groupsEl.innerHTML = groups
     .map((group) =>

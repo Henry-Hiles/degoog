@@ -130,7 +130,7 @@
 .tools-field-menu {
   position: absolute;
   top: calc(100% + #{$space-1});
-  left: 0;
+  inset-inline-start: 0;
   z-index: 200;
 }
 
@@ -207,7 +207,7 @@
         #{$space-5}
       );
 
-    padding-right: 0;
+    padding-inline-end: 0;
     gap: $space-7;
 
     #results-main {

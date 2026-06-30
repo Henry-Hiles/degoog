@@ -48,7 +48,7 @@
     },
     "image-filters": {
       "title": "Filters",
-      "any": "Any",
+      "default": "Default",
       "toggle": "Filters",
       "close": "Close filters",
       "size": "Size",

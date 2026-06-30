@@ -29,6 +29,7 @@ import { extensionReadmeExists } from "../../utils/extension-docs";
 import { logger } from "../../utils/logger";
 import { getInstanceSettings } from "../../utils/server-settings";
 import { DEGOOG_ENGINE_ID } from "./builtins/degoog";
+import type { EngineFilters } from "../../../shared/engine-filters";
 
 const builtinsDir = join(import.meta.dir, "builtins");
 
@@ -40,8 +41,6 @@ export const clearTypeCache = (): void => {
 };
 
 export type EngineSearchType = string;
-
-export type EngineFilters = Record<string, string[]>;
 
 export const ENGINE_IDS = [] as readonly string[];
 export type EngineId = string;

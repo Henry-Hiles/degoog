@@ -76,7 +76,7 @@ export function initOptionsDropdown(): void {
     tabsRow.after(panel);
   }
 
-  let _activeField: HTMLElement | null = null;
+  let activeField: HTMLElement | null = null;
 
   function updateToggle(): void {
     toggle!.classList.toggle("active", isActive());
@@ -103,25 +103,36 @@ export function initOptionsDropdown(): void {
   }
 
   function closeField(): void {
-    if (_activeField) {
-      _activeField.style.display = "none";
-      _activeField = null;
+    if (activeField) {
+      activeField.style.display = "none";
+      panel!
+        .querySelector<HTMLElement>(
+          `.tools-field-toggle[aria-controls="${activeField.id}"]`,
+        )
+        ?.setAttribute("aria-expanded", "false");
+      activeField = null;
     }
   }
 
   function openField(menu: HTMLElement): void {
-    if (_activeField === menu) {
+    if (activeField === menu) {
       closeField();
       return;
     }
     closeField();
     menu.style.display = "block";
-    _activeField = menu;
+    panel!
+      .querySelector<HTMLElement>(
+        `.tools-field-toggle[aria-controls="${menu.id}"]`,
+      )
+      ?.setAttribute("aria-expanded", "true");
+    activeField = menu;
   }
 
   function setPanelOpen(open: boolean): void {
     panel!.style.display = open ? "flex" : "none";
     toggle!.classList.toggle("is-open", open);
+    toggle!.setAttribute("aria-expanded", open ? "true" : "false");
     if (!open) closeField();
     writeOpenPref(open);
   }
